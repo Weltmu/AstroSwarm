@@ -1,0 +1,21 @@
+{
+  "_comment": "档位定义。只有 all_plugins=true 的档位解锁全部付费包；min_amount 是该档开通报酬的最低金额（元）。改这里不用改代码（也能用环境变量 ASTROSWARM_PLANS_FILE 指向别的文件）。桌面端、无头端与账号服务端必须保持同一套语义，tests/test_desktop_gates.py 会做一致性校验。",
+  "permanent": {
+    "all_plugins": true,
+    "min_amount": 0,
+    "note": "永久会员：解锁全部付费包（人工/兑换码/全包买断发放）"
+  },
+  "monthly": {
+    "all_plugins": false,
+    "min_amount": 0.01,
+    "note": "月费赞助：只解锁 owned_plugins 里单独买断的包，不默认全放行"
+  },
+  "quarterly": {
+    "all_plugins": false,
+    "min_amount": 0.01
+  },
+  "yearly": {
+    "all_plugins": false,
+    "min_amount": 0.01
+  }
+}

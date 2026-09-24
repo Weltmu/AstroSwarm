@@ -1,0 +1,20 @@
+{
+  "name": "astroswarm-console",
+  "private": true,
+  "version": "0.1.4",
+  "type": "module",
+  "description": "星群控制台前端：Linux 无头版的网页界面（React + Vite）。构建产物 console-dist/ 由无头端直接托管。",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^5.4.11"
+  }
+}
