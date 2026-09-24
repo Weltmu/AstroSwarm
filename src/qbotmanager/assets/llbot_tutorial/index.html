@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>LLOneBot 无头模式连接星群客户端教程</title>
+</head>
+<body style="background-color:#ffffff;font-family:'Microsoft YaHei','PingFang SC',sans-serif;color:#1f2937;font-size:14px;line-height:1.7;">
+
+<h1 align="center" style="font-size:24px;color:#111827;margin-bottom:2px;">LLOneBot 无头模式连接星群客户端教程</h1>
+<p align="center" style="color:#6b7280;font-size:12px;margin-top:0;">AstroSwarm 星群 · 客户配置指南</p>
+
+<p>适用：在 Windows 上用 LLOneBot（LLBot）无头模式登录 QQ 小号，通过反向 WebSocket 主动连接星群客户端，让星群里的 NoneBot / AI 大脑接管 QQ 机器人。全程大约 5 分钟。</p>
+
+<table width="100%" cellpadding="10" cellspacing="0" style="background-color:#fef2f2;border:1px solid #dc2626;">
+<tr><td style="color:#991b1b;font-size:13px;">
+<b>重要声明（请先阅读）：</b><br>
+1. <b>第三方 QQ 机器人违反腾讯用户协议。</b>LLOneBot 等第三方协议端属于未经腾讯授权的非官方登录方式，违反《腾讯服务协议》《QQ 软件许可及服务协议》等条款，账号存在被限制功能、冻结甚至封禁的风险。<br>
+2. <b>星群不提供内嵌式 QQ 通讯协议连接 agent。</b>星群（AstroSwarm）不内置、不提供、不分发任何 QQ 通讯协议层，也不通过 QQ 通讯协议直接连接 agent；星群只实现标准 OneBot v11 对接，协议端由用户自行安装、自行登录、自行维护。<br>
+3. <b>一切行为请用户自行承担。</b>因使用第三方协议产生的一切后果（账号封禁、数据风险、法律风险等）均由用户自行承担，星群不承担任何责任。<br>
+4. 强烈建议使用 QQ 小号测试，不要使用主号。
+</td></tr>
+</table>
+
+<h2 style="font-size:17px;color:#6d28d9;margin-top:22px;">准备工作</h2>
+<ol>
+<li>一台 Windows 电脑，已安装星群客户端（AstroSwarm）。</li>
+<li>一个 QQ 小号（建议不要用主号）。</li>
+<li>已下载 LLOneBot（LLBot）无头版并解压到本地目录。</li>
+<li><b>先去 LLOneBot 官网（https://llonebot.org）注册/登录账号，在个人中心找到你的 Token 并复制保存</b>——LLBot 控制面板首次使用需要用它登录绑定，后面配置会用到。</li>
+</ol>
+
+<h2 style="font-size:17px;color:#6d28d9;margin-top:22px;">第 1 步：配置 QQ 账号（并开启无头模式）</h2>
+<p>进入 LLBot 控制面板 →「系统配置 → 启动选项」，按下表设置：</p>
+<ul>
+<li>自动登录 QQ#：填你的小号（如 3636775360）；</li>
+<li>勾选「无头模式（不依赖 QQ 本体，纯协议实现）」：必须开启；</li>
+<li>勾选「启动软件后自动启动 Bot」：推荐开启；</li>
+<li>可选：启动后自动进托盘、开机自启；</li>
+<li>调试模式不用开（除非要看控制台排错）。</li>
+</ul>
+<p align="center"><img src="企业微信截图_17873915315933.png" width="520"></p>
+<p align="center" style="color:#6b7280;font-size:12px;">图 1：LLBot 启动选项（配置 QQ）</p>
+
+<h2 style="font-size:17px;color:#6d28d9;margin-top:22px;">第 2 步：启动 Bot，扫码登录并确认成功</h2>
+<p>回到控制面板启动 Bot，此时会出现 QQ 登录二维码，用 QQ 手机端扫码；登录成功后回到控制面板确认：小号 UIN 已显示、配置文件已自动生成。</p>
+<ul>
+<li>控制面板「LLBot 信息」里显示当前 QQ 小号 UIN（如 3636775360）；</li>
+<li>配置文件已自动生成，路径形如 D:\LLonebot_bin\llbot\data\config-3636775360.json；</li>
+<li>确认登录成功后再进行下面的其他配置。</li>
+</ul>
+<p align="center"><img src="企业微信截图_17873915263638.png" width="520"></p>
+<p align="center" style="color:#6b7280;font-size:12px;">图 2：LLBot 控制面板（登录成功确认）</p>
+
+<h2 style="font-size:17px;color:#6d28d9;margin-top:22px;">第 3 步：在星群客户端复制反向 WS 地址</h2>
+<p>打开星群客户端 →「QQ 机器人」页，接入方式选「第三方 OneBot（反向 WS，推荐）」，点「复制地址」。</p>
+<p>复制到的地址为：<b>ws://127.0.0.1:12111/onebot/v11/ws</b></p>
+<p>要点：监听端口默认 12111（跟随星群 NoneBot 端口）；访问令牌先留空（第 4 步也留空，如设置令牌则两边必须一致）；状态显示「等待协议端反向连接」是正常的，LLBot 连上后变已连接。</p>
+<p align="center"><img src="企业微信截图_17873922762895.png" width="520"></p>
+<p align="center" style="color:#6b7280;font-size:12px;">图 3：星群客户端反向 WS 地址</p>
+
+<h2 style="font-size:17px;color:#6d28d9;margin-top:22px;">第 4 步：在 LLBot 里添加反向 WebSocket 客户端</h2>
+<p>回到 LLBot 控制面板 →「系统配置 → 网络配置（OneBot 11）」→「WebSocket 客户端（反向）」，点击添加/编辑，按下表填写：</p>
+<table width="100%" border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;border-color:#d1d5db;font-size:13px;">
+<tr style="background-color:#ede9fe;"><td><b>配置项</b></td><td><b>填写内容</b></td></tr>
+<tr><td>启用 OneBot 11</td><td>开启</td></tr>
+<tr><td>WebSocket 客户端（反向）</td><td>开启</td></tr>
+<tr><td>URL</td><td>ws://127.0.0.1:12111/onebot/v11/ws（第 3 步复制的地址）</td></tr>
+<tr><td>消息格式</td><td>array</td></tr>
+<tr><td>Token / 访问令牌</td><td>留空（与星群一致；星群设了令牌就填同一个）</td></tr>
+<tr><td>上报自身 / 上报离线</td><td>可选，建议开启</td></tr>
+</table>
+<p align="center"><img src="企业微信截图_17873922821639.png" width="520"></p>
+<p align="center" style="color:#6b7280;font-size:12px;">图 4：LLBot 反向 WebSocket 配置</p>
+<p>保存后，LLBot 会作为客户端主动连回星群，不需要端口转发。</p>
+
+<h2 style="font-size:17px;color:#6d28d9;margin-top:22px;">第 5 步：回星群启动并验证</h2>
+<ol>
+<li>回星群客户端点「启动全部」（或仅启动 NoneBot）；</li>
+<li>QQ 页状态从「等待协议端反向连接」变为「已连接 / 运行中」；</li>
+<li>到 QQ 群里 @ 机器人发一条「你好」，机器人回复即打通。</li>
+</ol>
+
+<h2 style="font-size:17px;color:#6d28d9;margin-top:22px;">常见问题</h2>
+<table width="100%" border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;border-color:#d1d5db;font-size:13px;">
+<tr style="background-color:#ede9fe;"><td><b>问题</b></td><td><b>解决办法</b></td></tr>
+<tr><td>端口被占用 / 连不上</td><td>确认 LLBot 的 URL 端口和星群设置里的 NoneBot 端口一致（默认 12111），两个程序不要改得不一样。</td></tr>
+<tr><td>令牌不一致</td><td>星群「访问令牌」和 LLBot 的 Token 要么都留空，要么填同一个，否则会被拒绝连接。</td></tr>
+<tr><td>无头模式下小号登录不上</td><td>回「启动选项」确认自动登录 QQ# 填对；若之前用 QQ 本体登录过，确认小号没有被挤下线。</td></tr>
+<tr><td>控制面板登录/绑定失败</td><td>确认已先在 LLOneBot 官网注册登录并准备好 Token，控制面板首次使用需要用该 Token 登录绑定。</td></tr>
+<tr><td>协议端在另一台电脑</td><td>星群端「监听地址」改成 0.0.0.0，LLBot 的 URL 里把 127.0.0.1 换成星群那台电脑的局域网 IP（如 ws://192.168.1.10:12111/onebot/v11/ws）。</td></tr>
+</table>
+
+<p style="color:#6b7280;font-size:12px;margin-top:18px;">如需进一步协助，请联系星群客服。</p>
+</body>
+</html>

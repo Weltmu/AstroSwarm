@@ -1,0 +1,9 @@
+# qbm-bridge bundle 层：用 insert 块往空条目列表插入桥插件自身
+- insert:
+    - id: qbm-bridge
+      name: qbm-bridge
+      config:
+        host: 127.0.0.1
+        port: 18650
+        provider: deepseek-official
+        model: deepseek-v4-flash

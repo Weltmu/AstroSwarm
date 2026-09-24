@@ -1,0 +1,57 @@
+# ---------- 构建 / 运行产物 ----------
+dist/
+dist_package/
+build/
+build314/
+release/
+_probe_build*/
+_probe_dist*/
+__pycache__/
+*.py[co]
+*.pyc
+*.py.bak
+logs/
+*.log
+
+# ---------- 大二进制 / 打包物（不进仓库，用发布流程管理）----------
+tools/gh-cli/
+*.exe
+*.msi
+*.zip
+*.tar.gz
+*.tgz
+*.7z
+
+# ---------- 备份与客户数据（绝不能进仓库）----------
+backups/
+*.bak_*
+*.bak
+test_pack_key.pem
+tools/license_records_recovered.json
+
+# ---------- 虚拟环境 ----------
+.build_venv*/
+.test_venv/
+.venv/
+venv/
+
+# ---------- 凭据 ----------
+admin.token
+private.key
+*.pem
+*.key
+*.env
+
+# 独立仓库（release notes），不并进主仓库
+github_release/
+# 私有：不进公开仓库（服务器运维脚本、授权服务、机主个人实例）
+_private/
+server_sync/
+license_server/
+server_app_pull.py
+__pycache__/
+*.pyc
+*.pyo
+
+# 本机敏感串守卫（不进仓库）
+tools/.release_guard.txt

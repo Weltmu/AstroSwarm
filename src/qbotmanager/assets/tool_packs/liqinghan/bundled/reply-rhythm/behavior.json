@@ -1,0 +1,9 @@
+{
+  "activity_delay": {
+    "busy_long_probability": 0.35,
+    "busy_long_seconds": [180, 900],
+    "busy_short_seconds": [8, 40],
+    "idle_probability": 0.1,
+    "idle_seconds": [60, 180]
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "id": "knowledge",
+  "name": "产品知识库能力包",
+  "version": "1.0.0",
+  "kind": "tool-pack",
+  "description": "回答 AstroSwarm 产品问题（安装 / 授权 / 能力包 / 开源）。",
+  "adapters": ["qq_official", "wechat_ilink"],
+  "min_version": "0.4.0",
+  "permissions": [],
+  "tools": [
+    {
+      "name": "product_faq",
+      "description": "查询 AstroSwarm 产品知识库并回答",
+      "parameters": {
+        "type": "object",
+        "properties": {"question": {"type": "string"}},
+        "required": ["question"]
+      },
+      "permissions": [],
+      "lifecycle": "none"
+    }
+  ]
+}

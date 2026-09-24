@@ -1,0 +1,34 @@
+{
+  "id": "memory",
+  "name": "记忆能力包",
+  "version": "1.0.0",
+  "kind": "tool-pack",
+  "description": "长期记忆：记住/回忆用户说过的事情。",
+  "adapters": ["qq_official", "wechat_ilink"],
+  "min_version": "0.4.0",
+  "permissions": ["memory"],
+  "tools": [
+    {
+      "name": "remember",
+      "description": "记住用户提到的某件事",
+      "parameters": {
+        "type": "object",
+        "properties": {"user": {"type": "string"}, "fact": {"type": "string"}},
+        "required": ["fact"]
+      },
+      "permissions": ["memory"],
+      "lifecycle": "none"
+    },
+    {
+      "name": "fetch_memory",
+      "description": "回忆某个用户的长期记忆",
+      "parameters": {
+        "type": "object",
+        "properties": {"user": {"type": "string"}},
+        "required": []
+      },
+      "permissions": ["memory"],
+      "lifecycle": "none"
+    }
+  ]
+}

@@ -1,0 +1,55 @@
+{
+  "id": "group-manager",
+  "name": "群管理能力包",
+  "version": "1.0.1",
+  "kind": "tool-pack",
+  "description": "禁言、全员禁言、撤回等群管理工具（QQ 官方通道可用能力，最长 30 天）。",
+  "adapters": ["qq_official"],
+  "min_version": "0.4.0",
+  "permissions": ["group_admin", "send_message"],
+  "tools": [
+    {
+      "name": "mute_user",
+      "description": "禁言群成员指定分钟数；minutes 为分钟数（1小时=60，1天=1440），用户说具体时间（如明天早上10点）时先换算成分钟",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "group_id": {"type": "string"},
+          "user_id": {"type": "string"},
+          "minutes": {"type": "integer", "minimum": 1, "maximum": 43200, "description": "禁言分钟数，最长 43200（30 天）"}
+        },
+        "required": ["group_id", "user_id", "minutes"]
+      },
+      "permissions": ["group_admin"],
+      "lifecycle": "none"
+    },
+    {
+      "name": "mute_all",
+      "description": "全员禁言整个群，minutes 分钟后自动解除；minutes 为分钟数（1小时=60，1天=1440），用户说具体时间（如明天早上10点）时先换算成分钟",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "group_id": {"type": "string"},
+          "minutes": {"type": "integer", "minimum": 1, "maximum": 43200, "description": "禁言分钟数，最长 43200（30 天）"}
+        },
+        "required": ["group_id", "minutes"]
+      },
+      "permissions": ["group_admin", "timer"],
+      "lifecycle": "scheduler"
+    },
+    {
+      "name": "recall_message",
+      "description": "撤回指定消息",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "group_id": {"type": "string"},
+          "message_id": {"type": "string"}
+        },
+        "required": ["group_id", "message_id"]
+      },
+      "permissions": ["group_admin"],
+      "lifecycle": "none"
+    }
+  ]
+}

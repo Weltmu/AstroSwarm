@@ -1,0 +1,28 @@
+{
+  "id": "web-search",
+  "name": "联网搜索能力包",
+  "version": "1.0.0",
+  "kind": "tool-pack",
+  "description": "让 AI 联网搜索：知识库答不了的实时、外部、对比类问题，自动搜 Bing 获取带来源的答案。",
+  "adapters": ["qq_official", "wechat_ilink"],
+  "min_version": "0.4.0",
+  "permissions": ["network"],
+  "tools": [
+    {
+      "name": "web_search",
+      "description": "联网搜索互联网获取最新或未知信息（产品对比、新闻、名词解释、价格等），返回带链接的搜索结果",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "搜索关键词，尽量精简，中文或英文均可"
+          }
+        },
+        "required": ["query"]
+      },
+      "permissions": ["network"],
+      "lifecycle": "none"
+    }
+  ]
+}
