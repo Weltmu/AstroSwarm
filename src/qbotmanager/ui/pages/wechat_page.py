@@ -99,7 +99,9 @@ class WechatPage(QWidget):
         locked = not gate.get("member", True)
         if locked:
             reason = gate.get("reason") or "QQ 通道可用；微信通道未开通"
-            self.gate_lock.setText(reason + "。开通后即可扫码登录。")
+            self.gate_lock.setText(
+                reason + "。开通后即可扫码登录；适配器源码随仓库开源（Apache-2.0），"
+                "你也可以自己接入，只是不含官方支持。")
             self.gate_lock.show()
             self.btn_pay.show()
         else:

@@ -4102,6 +4102,9 @@ function Settings({
             <button type="button" className="btn btn--self" onClick={checkUpdate}>
               检查更新
             </button>
+            <p className="card__note">
+              客户端与全部插件源码在 GitHub 开源（Apache-2.0）：QQ 通道与能力包免费，微信通道为官方付费开通，也可以自己用仓库里的适配器接入（不含官方支持）。
+            </p>
           </section>
         </div>
       )}
