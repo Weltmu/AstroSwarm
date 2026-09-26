@@ -147,7 +147,7 @@ class AccountWindow(QDialog):
                 txt += "，旧设备已下线"
             self.acct_status.setText(txt)
             self.account_changed.emit()
-            # claim 的响应里不一定带权益签名，而「有没有签名」决定付费能力是否生效，
+            # claim 的响应里不一定带权益签名，而「有没有签名」决定权益是否生效，
             # 所以认领后再按权威接口同步一次（拿不到就保持现状，不覆盖）。
             self._sync_entitlement_from_me()
             return
@@ -186,17 +186,17 @@ class AccountWindow(QDialog):
 
     @staticmethod
     def _plan_tag(plan) -> str:
-        """档位说明：全解锁 / 会员（微信通道） / 试用 / 免费，不再只写「付费版」。"""
+        """档位说明：已开通（微信通道）/ 试用 / 仅 QQ。"""
         from ...core import plans as plans_mod
 
         name = str(plan or "").lower()
         if plans_mod.allows_all(name):
-            return "永久档 · 已解锁全部能力包"
+            return "永久档 · 微信通道已开通"
         if name in plans_mod.MEMBER_PLANS:
-            return "会员档 · 微信通道已解锁"
+            return "已开通 · 微信通道"
         if name == "trial":
             return "试用 · 仅 QQ"
-        return "免费版 · 仅 QQ"
+        return "未开通 · 仅 QQ"
 
     # ------------------------------------------------------------ 退出
     def _logout_account(self):

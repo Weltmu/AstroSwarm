@@ -210,8 +210,8 @@ def ensure_bot(log=print) -> Settings:
         log(f"AI 配置写入跳过：{exc}")
     try:
         # 微信通道按真实权益决定，写死 False 会在每次部署时把 ilink 适配器删掉。
-        # 用 member 而不是 full：full 是「解锁全部付费能力包」（只有 permanent），
-        # 微信通道属于「付费会员」能力，月费档也该有。
+        # 用 member 而不是 full：full 是历史的全解锁字段（只有 permanent），
+        # 微信通道看的是「这个档位开通了没有」。
         _full = False
         try:
             from . import auth as _auth
@@ -221,7 +221,7 @@ def ensure_bot(log=print) -> Settings:
         except Exception:  # noqa: BLE001
             _full = False
         bot_mod.apply_wechat_gate(s, full=_full)
-        log("微信通道（iLink）：%s" % ("已启用手" if _full else "未解锁，仅 QQ"))
+        log("微信通道（iLink）：%s" % ("已启用" if _full else "未开通，仅 QQ"))
     except Exception as exc:  # noqa: BLE001
         log(f"微信闸门同步跳过：{exc}")
     return s
@@ -243,8 +243,8 @@ def _env(settings: Settings) -> dict:
     env["ASTROSWARM_TOOL_PACKS"] = str(platform_info.data_home() / "tool_packs")
     _packs = _allowed_packs()
     env["ASTROSWARM_TOOL_PACKS_ALLOWED"] = ",".join(_packs)
-    # 主动聊天是付费能力包：它的实现（ai 插件里的 proactive 模块）必须在确认授权后才导入，
-    # 否则「付费门」只在工具清单上，代码照样随免费插件一起加载 = 白送。
+    # 主动聊天能力包（2026-09 起随主仓库开源）：装上并允许加载时开开关；
+    # 实现（ai 插件里的 proactive 模块）由 ASTROSWARM_PACK_PROACTIVE 控制导入。
     if "proactive" in _packs:
         env["ASTROSWARM_PACK_PROACTIVE"] = "1"
     # 已安装回复节奏行为包 → 李清菡插件用其配置覆盖内置默认节奏
@@ -258,7 +258,7 @@ def _allowed_packs() -> list:
     """本机已安装、可以加载的工具包（装了就加载）。
 
     2026-09 起能力包全部免费（随主仓库开源）：不再看 plan / owned_plugins /
-    账号签名，也不再有「会员到期冻结」。仍然逐个读 manifest.json 取 id，
+    账号签名，也不再有「到期冻结」。仍然逐个读 manifest.json 取 id，
     是为了跳过没有 id 的坏包（历史目录残留、手工拷一半的包）。
     """
     root = platform_info.data_home() / "tool_packs"

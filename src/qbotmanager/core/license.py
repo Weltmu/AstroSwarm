@@ -20,13 +20,13 @@ from pathlib import Path
 # 与服务器一致
 PRODUCT_ID = "qbotmanager-v1"
 TRIAL_PRODUCT_ID = "qbotmanager-trial-v1"
-PAY_URL = "https://ifdian.net/a/astroswarm"
+PAY_URL = "https://astroswarm.cn/account.html"
 # 签发站：优先 HTTPS（nginx 把 astroswarm.cn/license/ 反代到 8300），旧明文地址只作回退
 SERVER_URL = "https://astroswarm.cn/license"
 SERVER_URL_FALLBACKS = ()   # 公开代码里不放明文 IP；签发站统一走 https://astroswarm.cn/license
 SERVER_WEB = "https://astroswarm.cn"
 PUBLIC_KEY_HEX = "904bcb7bdfa60d0d129157032844730c6bfc0ee0d76ba43154a64d59d4b09415"
-GRACE_DAYS = 30           # 买断密钥的联网复查窗口（天）
+GRACE_DAYS = 30           # 长期密钥的联网复查窗口（天）
 TRIAL_RECHECK_DAYS = 7    # 试用密钥的联网复查窗口（天）
 OFFLINE_GRACE_DAYS = 7    # 复查窗口已过但仍连不上服务器时的宽限期（天），期间照常可用
 
@@ -183,7 +183,7 @@ def clear_license():
         logger.warning("清除许可证失败: %s", e)
 
 
-# 付费门禁的服务器签名。规范文本两端必须一字不差。
+# 权益门禁的服务器签名。规范文本两端必须一字不差。
 ENTITLEMENT_PREFIX = "QBM-ENT1"
 
 
@@ -200,8 +200,8 @@ def entitlement_payload(machine_id: str, plan, plan_expires_at=0, owned_plugins=
 def verify_entitlement(lic: dict | None = None) -> bool:
     """校验本地 plan / 已购插件是否带服务器 Ed25519 签名。
 
-    feature_gate() 不能只信本地 JSON：记事本改一行 plan 就能解锁；
-    现在没有有效签名一律按免费版处理（fail closed）。
+    feature_gate() 不能只信本地 JSON：记事本改一行 plan 就能改权益；
+    现在没有有效签名一律按未开通处理（fail closed）。
     """
     lic = load_license() if lic is None else lic
     if not lic:
@@ -220,16 +220,16 @@ def verify_entitlement(lic: dict | None = None) -> bool:
         VerifyKey(bytes.fromhex(PUBLIC_KEY_HEX)).verify(payload.encode(), base64.b64decode(sig))
         return True
     except Exception as e:  # noqa: BLE001
-        logger.warning("权益签名校验失败（按免费版处理）: %s", e)
+        logger.warning("权益签名校验失败（按未开通处理）: %s", e)
         return False
 
 
 def save_plan(plan: str, plan_expires_at: float = 0, owned_plugins=None,
               sig: str = "", machine_id: str = ""):
-    """记录账号授权档位（permanent / monthly / trial）与单独购买的插件。
+    """记录账号授权档位（permanent / monthly / trial）与本机已登记的插件。
 
     `sig` 是账号服务用发码私钥对 entitlement_payload(...) 的 base64 签名；
-    没有它 feature_gate()/entitlements() 一律按免费版 —— 光改本地 JSON 不再能解锁。
+    没有它 feature_gate()/entitlements() 一律按未开通处理 —— 光改本地 JSON 不再生效。
     """
     data = {}
     try:
@@ -253,10 +253,10 @@ def save_plan(plan: str, plan_expires_at: float = 0, owned_plugins=None,
 def save_entitlements_from_account(data: dict) -> bool:
     """把账号服务返回的权益（/me、/redeem、program-sync 都是这套字段名）落到本机。
 
-    **没有签名就不写**：签名决定付费能力是否生效，而账号服务有些响应不带
+    **没有签名就不写**：签名决定权益是否生效，而账号服务有些响应不带
     entitlement_sig（比如没登录权益、或这次没下发）。以前桌面端直接
     save_plan(..., sig=data.get("entitlement_sig") or "")，一次例行同步就把本机
-    已有的好签名抹成空 -> 付费插件/微信通道当场掉回免费版，用户以为"买的白买了"。
+    已有的好签名抹成空 -> 微信通道当场掉回「未开通」，用户以为权益丢了。
     返回值 = 这次是否真的写入了新权益。
     """
     if not isinstance(data, dict):
@@ -275,13 +275,12 @@ def save_entitlements_from_account(data: dict) -> bool:
 
 
 def entitlements() -> dict:
-    """插件商店权益：当前账号 plan / 是否会员 / 单独购买的插件列表。
+    """插件商店权益：当前账号 plan / 通道是否开通 / 已登记的插件列表。
 
-    字段必须通过服务器签名校验；校验不过按免费版（连已购插件也不认）。
+    字段必须通过服务器签名校验；校验不过按未开通处理。
 
-    - `all_plugins` / `full` = 解锁**全部付费能力包**：只有 plans.json 里该档
-      all_plugins=true（目前只有 permanent）且未过期才为真；
-    - `member` = 付费会员档且未过期（解锁微信等付费通道）；trial 不算会员。
+    - `all_plugins` / `full` = 历史字段（能力包已全部免费，运行时不再按它放行）；
+    - `member` = 已开通的档位且未过期（微信通道看它）；trial 不算。
     """
     lic = load_license() or {}
     if not verify_entitlement(lic):
@@ -304,7 +303,7 @@ def entitlements() -> dict:
 
 
 def _plan_flags(plan: str, plan_exp: float, lic: dict) -> tuple:
-    """按 plans.json 判两个互不替代的口径：(解锁全部付费包, 是否付费会员)。
+    """按 plans.json 判两个互不替代的口径：(历史的全解锁, 微信通道是否开通)。
 
     到期判断用本地时钟 + license 里的服务器时间偏移（_effective_now），
     不直接用 time.time()，避免改本机时间变相续期。
@@ -320,16 +319,15 @@ def _plan_flags(plan: str, plan_exp: float, lic: dict) -> tuple:
 def feature_gate() -> dict:
     """功能闸门：邮箱账号授权，不再需要激活码。
 
-    - `full` / `all_plugins` = 解锁**全部付费能力包**（只有 plans.json 里
-      all_plugins=true 的档位，目前只有 permanent）；
-    - `member` = 付费会员档且未过期，微信等付费通道看它；trial 不算会员。
+    - `full` / `all_plugins` = 历史字段（能力包已全部免费，运行时不再按它放行）；
+    - `member` = 已开通的档位且未过期，微信通道看它；trial 不算。
     """
     lic = load_license() or {}
-    # 没签名（或签名不对）一律免费版：改本地 plan 不再是「付费后解锁微信」
+    # 没签名（或签名不对）一律按未开通处理：改本地 plan 不会开通微信通道
     if not verify_entitlement(lic):
         return {"full": False, "member": False, "all_plugins": False,
                 "plan": "none", "plan_expires_at": 0,
-                "reason": "免费版仅支持 QQ 机器人，付费后解锁微信（权益未通过签名校验）"}
+                "reason": "QQ 通道可用；微信通道未开通（本机权益未通过签名校验）"}
     plan = str(lic.get("plan") or "trial").lower()
     plan_exp = float(lic.get("plan_expires_at") or 0)
     allp, member = _plan_flags(plan, plan_exp, lic)
@@ -339,7 +337,7 @@ def feature_gate() -> dict:
         "all_plugins": allp,
         "plan": plan,
         "plan_expires_at": plan_exp,
-        "reason": "" if member else "免费版仅支持 QQ 机器人，付费后解锁微信",
+        "reason": "" if member else "QQ 通道可用；微信通道未开通",
     }
 
 
@@ -438,7 +436,7 @@ def status() -> dict:
     remaining_days = details.get("remaining_days")
     if expires_at is not None and remaining_days == 0:
         return {"activated": False, "machine_id": mid, "key": lic.get("key", ""),
-                "reason": "免费版（仅 QQ 通道）", "revoked": False}
+                "reason": "仅 QQ 通道可用", "revoked": False}
     last = float(lic.get("last_check") or 0)
     grace_days = (time.time() - last) / 86400.0
     return {

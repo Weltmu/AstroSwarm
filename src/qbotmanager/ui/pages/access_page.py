@@ -64,7 +64,7 @@ class AccessPage(QWidget):
             "第三方 OneBot 协议（协议端如 NapCat / LLOneBot 需你自己装）", "QQ"))
         pv.addWidget(self._make_channel_block(
             "wechat", "微信 ClawBot",
-            "腾讯官方 iLink 通道，扫码登录（会员档）", "微信"))
+            "腾讯官方 iLink 通道，扫码登录（需先开通）", "微信"))
         for key, name, desc in (
             ("feishu", "飞书", "适配器还没做"),
             ("telegram", "纸飞机", "适配器还没做"),
@@ -259,7 +259,7 @@ class AccessPage(QWidget):
         except Exception:  # noqa: BLE001
             member = False
         if not member:
-            wx_badge.set_status("stopped", "微信 · 需会员档解锁")
+            wx_badge.set_status("stopped", "微信 · 未开通")
         else:
             try:
                 wx = m.wechat_status()

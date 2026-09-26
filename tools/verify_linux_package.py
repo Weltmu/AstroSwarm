@@ -10,7 +10,7 @@
   3. 三种优先级：config.json > 环境变量 ASTROSWARM_ACCOUNT_BASE > 线上默认
   4. 运行时闸门读的是 plans.json 的 all_plugins（不是 plan 名）
   5. plugin_market 带清单签名校验（verify_manifest）
-  6. 包内没有付费能力包源码（tool_packs/<付费包 id>/）
+  6. 包内没有内部能力包源码（tool_packs/<包 id>/）
   7. 版本号与包名一致
 
 退出码 = 失败项数。
@@ -134,7 +134,7 @@ def main() -> int:
     else:
         bad("deploy.py 的运行时闸门没跟上 all_plugins")
 
-    # 6) 付费能力包源码残留
+    # 6) 内部能力包源码残留
     leaked = []
     for p in app.rglob("*"):
         parts = p.as_posix().split("/")
@@ -143,9 +143,9 @@ def main() -> int:
                 leaked.append(p.relative_to(root).as_posix())
                 break
     if leaked:
-        bad("付费能力包源码残留 %d 个（例：%s）" % (len(leaked), leaked[0]))
+        bad("内部能力包源码残留 %d 个（例：%s）" % (len(leaked), leaked[0]))
     else:
-        ok("包内无 tool_packs/<付费包 id>/ 源码")
+        ok("包内无 tool_packs/<包 id>/ 源码")
 
     for name in ("console-dist/index.html", "install.sh", "app/astroswarm_linux/console_ext.py"):
         if (root / name).exists():

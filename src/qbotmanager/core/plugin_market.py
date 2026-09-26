@@ -95,7 +95,7 @@ def entry_tier(entry: dict) -> str:
 def plugin_access(entry: dict, entitlements: dict | None = None) -> dict:
     """判断当前账号能否安装该插件。
 
-    插件已全部免费（2026-09 起随主仓库开源）：不再看档位 / 买断 / 登录状态，
+    插件已全部免费（2026-09 起随主仓库开源）：不再看档位 / 登录状态，
     任何条目都直接放行。entitlements 参数只为兼容旧调用方保留。
     """
     return {"allowed": True, "reason": "免费", "label": "免费"}

@@ -45,7 +45,7 @@ class WechatPage(QWidget):
             "border-radius: 6px; padding: 6px 8px;")
         self.gate_lock.hide()
         outer.addWidget(self.gate_lock)
-        self.btn_pay = QPushButton("付费解锁微信")
+        self.btn_pay = QPushButton("开通微信通道")
         self.btn_pay.setObjectName("ghost")
         self.btn_pay.clicked.connect(self._open_pay)
         self.btn_pay.hide()
@@ -98,8 +98,8 @@ class WechatPage(QWidget):
         gate = lic_mod.feature_gate()
         locked = not gate.get("member", True)
         if locked:
-            reason = gate.get("reason") or "免费版仅支持 QQ"
-            self.gate_lock.setText(reason + "。付费后自动解锁微信通道。")
+            reason = gate.get("reason") or "QQ 通道可用；微信通道未开通"
+            self.gate_lock.setText(reason + "。开通后即可扫码登录。")
             self.gate_lock.show()
             self.btn_pay.show()
         else:

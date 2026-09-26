@@ -50,7 +50,7 @@ def installed() -> list:
 def _entitled(plugin_id: str) -> bool:
     """能不能装/加载该能力包。
 
-    2026-09 起插件全部免费（随主仓库开源）：不再看账号签名、档位或单独购买，
+    2026-09 起插件全部免费（随主仓库开源）：不再看账号签名、档位或购买记录，
     恒为 True。函数名保留是为了兼容旧调用方（deploy._allowed_packs 等）。
     """
     return True

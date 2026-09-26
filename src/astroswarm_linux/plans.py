@@ -1,11 +1,11 @@
-"""档位权益（plans.json）：只有显式 all_plugins=true 的档位才解锁全部付费包。
+"""档位权益（plans.json）：档位表由账号服务下发，这里只做读取与兜底。
 
-与账号服务端的档位判定是**同一套语义**，
-这样「下载口（服务端 plugin_zip）」与「运行时闸门（无头端）」不会各判各的：
+与账号服务端是**同一套语义**：
 
-    permanent                  all_plugins=true   → 解锁全部付费包
-    monthly/quarterly/yearly   all_plugins=false  → 只放行 owned_plugins 里单独买断的包
-    未定义的档位                → False（不默认放行，fail-closed）
+    member = 档位有效且未过期（微信通道看这个判定；3 天试用不算）
+
+    表里的 all_plugins 是历史字段：2026-09 起能力包全部免费开源，
+    运行时不再按档位放行；现在只有微信通道还看 member。
 
 档位表从哪来（优先级从高到低）：
     1. config.json 的 plans_file
@@ -13,9 +13,8 @@
     3. 包内自带的 <本模块目录>/plans.json
     4. 本文件里的 _DEFAULT_PLANS（= 官方 plans.json 的内容）
 
-档位判定统一读 plans.json：只按 plan 名判（monthly/quarterly/yearly 未过期即 full）
-会让月费档和 3 天免费试用都能把磁盘上已装的付费包全部重新加载，
-与服务端下载口的口径不一致。
+档位判定统一读 plans.json，且只认服务器签名过的档位：
+只按 plan 名判会让本地改一行 config 就「全解锁」。
 """
 import json
 import os
@@ -26,7 +25,7 @@ PLANS_FILE_ENV = "ASTROSWARM_PLANS_FILE"
 BUNDLED_PLANS = Path(__file__).resolve().parent / "plans.json"
 
 # 服务端官方档位定义的内容；读不到任何文件时用它兜底。
-# **只有显式 all_plugins=true 的档位才解锁全部付费包。**
+# **只有显式 all_plugins=true 的档位才是历史意义上的「全解锁」。**
 _DEFAULT_PLANS = {
     "permanent": {"all_plugins": True, "min_amount": 0},
     "monthly": {"all_plugins": False, "min_amount": 0.01},
@@ -34,8 +33,7 @@ _DEFAULT_PLANS = {
     "yearly": {"all_plugins": False, "min_amount": 0.01},
 }
 
-# 「会员档」= 解锁付费通道（微信等）的档位。注意 trial 不在其中：
-# 3 天试用只给试用本身的能力，不算会员。
+# 开通了微信通道的档位。注意 trial 不在其中：3 天试用不算。
 MEMBER_PLANS = ("permanent", "monthly", "quarterly", "yearly")
 
 
@@ -97,7 +95,7 @@ def info(plan: str) -> dict:
 
 
 def allows_all(plan: str) -> bool:
-    """该档位是否「全包含」（解锁全部付费包）。没定义 → False，不默认全放行。"""
+    """该档位是否标记 all_plugins（历史字段）。没定义 → False，不默认全放行。"""
     return bool(info(plan).get("all_plugins"))
 
 
@@ -111,10 +109,10 @@ def active(exp) -> bool:
 
 
 def is_member(plan: str, exp) -> bool:
-    """付费会员档且未过期（trial / none / 未定义档位一律 False）。"""
+    """档位有效且已开通（trial / none / 未定义档位一律 False）。"""
     return str(plan or "").strip().lower() in MEMBER_PLANS and active(exp)
 
 
 def all_plugins(plan: str, exp) -> bool:
-    """全解锁 = 该档 all_plugins=true 且未过期。"""
+    """历史意义上的全解锁 = 该档 all_plugins=true 且未过期。"""
     return allows_all(plan) and active(exp)

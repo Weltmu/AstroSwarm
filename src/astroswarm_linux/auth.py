@@ -148,7 +148,7 @@ def me(token: str) -> dict:
 def verify_entitlement(cfg: dict | None = None) -> bool:
     """校验无头配置里的 plan / 已购插件是否带账号服务的 Ed25519 签名。
 
-    与桌面端同一套规范文本（license.entitlement_payload），验签不过一律按免费版。
+    与桌面端同一套规范文本（license.entitlement_payload），验签不过一律按未开通处理。
     """
     cfg = headless_config.load() if cfg is None else cfg
     sig = str(cfg.get("entitlement_sig") or "").strip()
@@ -175,14 +175,11 @@ def feature_gate(cfg: dict | None = None) -> dict:
 
     两个互不替代的判定：
 
-    - `full`   = 解锁**全部付费能力包**。只有 plans.json 里该档
-                 `all_plugins=true`（目前只有 permanent）且未过期才为真；
-                 monthly/quarterly/yearly 只放行 owned_plugins 里单独买断的包；
-                 trial 一律不算。
-    - `member` = 付费会员档且未过期（解锁微信等付费通道）。trial 不算会员。
+    - `member` = 已开通的档位且未过期（微信通道看它）。trial 不算。
+    - `full` / `all_plugins` = 历史字段：2026-09 起能力包全部免费，
+      运行时不再按档位放行，保留只为兼容旧调用方。
 
-    `full` 不能按 plan 名判：那样月费档和 3 天试用都会把磁盘上已装的付费包全部
-    重新加载，与服务端下载口的口径不一致。
+    判定只认服务器签名过的档位：光改本地 config 不会开通任何通道。
     """
     cfg = headless_config.load() if cfg is None else cfg
     if not verify_entitlement(cfg):
@@ -193,21 +190,21 @@ def feature_gate(cfg: dict | None = None) -> dict:
             "plan": "none",
             "plan_expires_at": 0,
             "email": cfg.get("account_email") or "",
-            "reason": "免费版仅支持 QQ，付费后解锁微信（权益未通过签名校验）",
+            "reason": "QQ 通道可用；微信通道未开通（本机权益未通过签名校验）",
         }
     plan = str(cfg.get("plan") or "none").lower()
     exp = float(cfg.get("plan_expires_at") or 0)
     allp = plans.all_plugins(plan, exp)
     member = plans.is_member(plan, exp) or allp
     return {
-        # full 保留给「全解锁付费能力包」；微信通道看 member（见 deploy/_env 与 wechat_state）
+        # 微信通道看 member（见 deploy/_env 与 wechat_state）；full 只作兼容保留
         "full": allp,
         "member": member,
         "all_plugins": allp,
         "plan": plan,
         "plan_expires_at": exp,
         "email": cfg.get("account_email") or "",
-        "reason": "" if member else "免费版仅支持 QQ，付费后解锁微信",
+        "reason": "" if member else "QQ 通道可用；微信通道未开通",
     }
 
 

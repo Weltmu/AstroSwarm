@@ -908,7 +908,7 @@ def test_feature_gate_not_activated():
         lic.load_license = lambda: None
         gate = lic.feature_gate()
         assert gate["full"] is False
-        assert "免费版" in gate["reason"] and "QQ" in gate["reason"]
+        assert "QQ" in gate["reason"] and "未开通" in gate["reason"]
     finally:
         (lic.status, lic.load_license) = orig
 

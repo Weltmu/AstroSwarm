@@ -260,9 +260,9 @@ class MainWindow(QWidget):
                     acc["token"], st["machine_id"], st.get("key", ""),
                     st.get("expires_at") or 0)
                 if data.get("ok"):
-                    # 同步服务器 plan / 单独购买插件，保持插件商店权益最新
+                    # 同步服务器 plan / 已登记插件，保持插件商店权益最新
                     # 没签名就不写：这次同步的响应不带 entitlement_sig 时，
-                    # 原来的写法会把本机已生效的付费权益抹成空签名（当场掉回免费版）
+                    # 原来的写法会把本机已生效的权益抹成空签名（当场掉回未开通）
                     lic_mod.save_entitlements_from_account(data)
             except Exception:  # noqa: BLE001
                 pass

@@ -373,8 +373,8 @@ def wechat_state() -> dict:
     settings = _settings()
     d = _ilink_dir()
     try:
-        # 微信通道看 member（付费会员档），不是 full（= 解锁全部付费能力包）：
-        # 月费档也该有微信，但月费档不解锁全部付费包。
+        # 微信通道看 member（已开通的档位），不是 full（历史的全解锁字段）：
+        # 两个判定分开，前端不要拿 full 当通道标志。
         _gate = auth_mod.feature_gate()
         full = bool(_gate.get("member", _gate.get("full")))
     except Exception:  # noqa: BLE001
@@ -547,7 +547,7 @@ def save_pack_config(pid: str, patch: dict) -> dict:
     return {"ok": True, "id": pid, "changed": changed, "values": cur, "path": str(path)}
 
 
-# ---------------------------------------------------------------- 买断：权益与兑换
+# ---------------------------------------------------------------- 权益与兑换
 def entitlement_state() -> dict:
     """本机当前的权益（账号服务下发、带签名；无头端只做镜像与展示）。"""
     from . import auth as auth_mod
@@ -563,8 +563,8 @@ def entitlement_state() -> dict:
         "plan": cfg.get("plan") or "none",
         "plan_expires_at": float(cfg.get("plan_expires_at") or 0),
         "owned_plugins": list(cfg.get("owned_plugins") or []),
-        # full = 解锁全部付费能力包（plans.json 的 all_plugins=true，目前只有 permanent）
-        # member = 付费会员档（解锁微信等付费通道）。两者分开，前端不要拿 full 当会员标志。
+        # full = 历史字段（plans.json 的 all_plugins，能力包已全部免费）
+        # member = 已开通的档位（微信通道）。两者分开，前端不要拿 full 当通道标志。
         "full": bool(gate.get("full")),
         "member": bool(gate.get("member")),
         "all_plugins": bool(gate.get("all_plugins", gate.get("full"))),

@@ -250,7 +250,7 @@ class QQChannelPanel(QWidget):
 class WeChatChannelPanel(QWidget):
     """微信 ClawBot 登录卡：状态、二维码、扫码 / 配对码 / 重启。
 
-    会员档判断放在面板里：独立页和接入页各有一个实例，谁都不需要知道对方存在。
+    开通判断放在面板里：独立页和接入页各有一个实例，谁都不需要知道对方存在。
     """
 
     def __init__(self, ctx: PageContext, show_badge=True, parent=None):
@@ -340,10 +340,10 @@ class WeChatChannelPanel(QWidget):
         member = self._is_member()
         self.set_buttons_enabled(member)
         if not member:
-            self.badge.set_status("stopped", "微信 ClawBot · 需会员档解锁")
+            self.badge.set_status("stopped", "微信 ClawBot · 未开通")
             self.login_hint.hide()
             self.qr_box.setPixmap(QPixmap())
-            self.qr_box.setText("免费版仅 QQ\n解锁后可扫码登录微信 ClawBot")
+            self.qr_box.setText("微信通道未开通\n开通后可扫码登录微信 ClawBot")
             self.ai_warn.hide()
             return
 

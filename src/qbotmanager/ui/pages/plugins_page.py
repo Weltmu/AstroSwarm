@@ -582,7 +582,7 @@ class PluginsPage(QWidget):
             self.ent_status.setText("权益刷新失败：" + _detail_of(res))
             return
         if not lic_mod.save_entitlements_from_account(res):
-            # 服务器这次没下发签名：保持本机现有权益（以前会把签名写成空 -> 掉回免费版）
+            # 服务器这次没下发签名：保持本机现有权益（以前会把签名写成空 -> 掉回未开通）
             self.ent_status.setText("权益已同步，但服务器没下发签名（本机现有权益保持不变）")
             return
         ent = lic_mod.entitlements()
@@ -604,7 +604,7 @@ class PluginsPage(QWidget):
                 if acc and acc.get("token"):
                     me = account.me(acc["token"])
                     if me.get("ok") is not False and me.get("plan"):
-                        # 拉最新会员档位 + 单独购买插件并写本地，商店立即按最新权益显示。
+                        # 拉最新权益并写本地，商店立即按最新权益显示。
                         # 走带保护的 helper：服务器没下发签名时不覆盖本机已有权益
                         if lic_mod.save_entitlements_from_account(me):
                             entitlements = lic_mod.entitlements()
@@ -650,7 +650,7 @@ class PluginsPage(QWidget):
         acc = account.load_account()
         if acc:
             plan_label = "当前账号：" + (
-                "永久档" if self._entitlements.get("full") else "免费版")
+                "已开通" if self._entitlements.get("full") else "仅 QQ 通道")
         else:
             plan_label = "未登录星群账号（插件不受影响）"
         self.ent_status.setText(plan_label)

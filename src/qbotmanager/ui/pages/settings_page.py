@@ -615,11 +615,11 @@ QTabBar::tab:selected {{ color: {active}; border-bottom: 2px solid {accent}; }}
         except Exception:  # noqa: BLE001
             plan, plan_exp = "none", 0
         if plan == "permanent" or (plan == "monthly" and plan_exp > time.time()):
-            label = "付费版 · 全功能"
+            label = "已开通 · 含微信通道"
         elif plan == "monthly":
-            label = "付费已过期 · 免费版（仅 QQ）"
+            label = "已到期 · 仅 QQ 通道"
         else:
-            label = "免费版（仅 QQ 通道）"
+            label = "仅 QQ 通道"
         self.info_labels["license_status"].setText(label)
         self.info_labels["license_status"].setToolTip(
             "授权随星群账号同步（邮箱登录，无需激活码）")

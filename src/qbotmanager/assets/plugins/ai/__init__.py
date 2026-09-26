@@ -38,7 +38,7 @@ else:
     from .manager import chat_manager
     from .platform import ChannelContext, ChannelMessage  # noqa: F401
 
-    # 主动聊天（原付费能力包）已随主仓库开源免费：部署端在装了这个能力包之后
+    # 主动聊天能力包已随主仓库开源免费：部署端在装了这个能力包之后
     # 会置位 ASTROSWARM_PACK_PROACTIVE=1，这里按它决定要不要导入实现。
     if _os.environ.get("ASTROSWARM_PACK_PROACTIVE") == "1":
         from .proactive import *  # noqa: F401,F403  主动聊天模块（导入时自动注册后台任务）

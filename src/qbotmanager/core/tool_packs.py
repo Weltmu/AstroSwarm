@@ -52,7 +52,7 @@ def _entitled(settings, plugin_id: str) -> bool:
 
 
 def installed(settings) -> list:
-    """列出已装能力包（含冻结标记：会员到期且未单买）。"""
+    """列出已装能力包（冻结标记为兼容保留，现在恒不冻结）。"""
     out = []
     root = packs_dir(settings)
     if not root.exists():
@@ -80,7 +80,7 @@ def installed(settings) -> list:
 
 
 def allowed_pack_ids(settings) -> list:
-    """当前账号可加载的已装能力包 id（会员/单买，会员到期即冻结）。"""
+    """当前账号可加载的已装能力包 id（能力包已全部免费，装了即加载）。"""
     return [
         p["id"] for p in installed(settings)
         if p.get("id") and not p.get("frozen")
@@ -172,7 +172,7 @@ def pack_env(settings) -> dict:
     rhythm = root / "reply-rhythm" / "behavior.json"
     if rhythm.exists():
         env["ASTROSWARM_REPLY_RHYTHM"] = str(rhythm)
-    # 主动聊天是付费能力包：只有确认授权后才让 ai 插件导入它的实现
+    # 主动聊天能力包：装了并允许加载后让 ai 插件导入它的实现
     if "proactive" in allowed:
         env["ASTROSWARM_PACK_PROACTIVE"] = "1"
     return env

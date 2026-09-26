@@ -213,7 +213,7 @@ class HomePage(QWidget):
         btn = QPushButton("去管理")
         btn.clicked.connect(lambda: self.ctx.switch_page("接入"))
         row.addWidget(btn)
-        self.wx_pay_btn = QPushButton("解锁微信")
+        self.wx_pay_btn = QPushButton("开通微信通道")
         self.wx_pay_btn.setObjectName("ghost")
         self.wx_pay_btn.clicked.connect(self._open_pay)
         row.addWidget(self.wx_pay_btn)
@@ -331,9 +331,9 @@ class HomePage(QWidget):
 
         gate = lic_mod.feature_gate()
         if not gate.get("member", True):
-            reason = gate.get("reason") or "免费版仅支持 QQ"
-            self.wx_badge.set_status("stopped", "微信 · 付费解锁")
-            self.wx_info.setText(reason + "\n付费解锁微信通道（开通会员或单独购买）")
+            reason = gate.get("reason") or "QQ 通道可用；微信通道未开通"
+            self.wx_badge.set_status("stopped", "微信 · 未开通")
+            self.wx_info.setText(reason + "\n在账号中心开通后即可扫码登录")
             self.wx_pay_btn.show()
             wx = {"logged_in": False}
         else:

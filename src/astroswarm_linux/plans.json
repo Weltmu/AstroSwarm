@@ -1,14 +1,14 @@
 {
-  "_comment": "档位定义。2026-09 起能力包全部免费/开源：all_plugins 只作兼容保留（已无付费包），member 档仍决定微信 iLink 通道等会员能力。min_amount 是该档开通报酬的最低金额（元）。改这里不用改代码（也能用环境变量 ASTROSWARM_PLANS_FILE 指向别的文件）。与账号服务端的档位定义保持同一套语义。",
+  "_comment": "档位定义。2026-09 起能力包全部免费/开源：all_plugins 只作兼容保留（已无付费包），member 档仍决定微信 iLink 通道是否开通。min_amount 是该档开通的最低金额（元）。改这里不用改代码（也能用环境变量 ASTROSWARM_PLANS_FILE 指向别的文件）。与账号服务端的档位定义保持同一套语义。",
   "permanent": {
     "all_plugins": true,
     "min_amount": 0,
-    "note": "永久档：长期会员能力（含微信通道），人工/兑换码发放"
+    "note": "永久档：长期开通（含微信通道），人工/兑换码发放"
   },
   "monthly": {
     "all_plugins": false,
     "min_amount": 0.01,
-    "note": "月费赞助：会员能力按月叠加（能力包已全免费，字段保留兼容）"
+    "note": "月费档：按月开通（含微信通道；能力包已全免费，字段保留兼容）"
   },
   "quarterly": {
     "all_plugins": false,

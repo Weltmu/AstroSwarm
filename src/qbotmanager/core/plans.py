@@ -1,19 +1,19 @@
-"""档位权益（plans.json）：只有显式 all_plugins=true 的档位才解锁全部付费包。
+"""档位权益（plans.json）：档位表由账号服务下发，这里只做读取与兜底。
 
-桌面端、Linux 无头端与账号服务端用的是**同一套语义**，否则
-「服务端下载口」「桌面端运行时闸门」「无头端运行时闸门」会各判各的：
+桌面端、Linux 无头端与账号服务端用的是**同一套语义**：
 
-    permanent                  all_plugins=true   → 解锁全部付费包
-    monthly/quarterly/yearly   all_plugins=false  → 只放行 owned_plugins 里单独买断的包
-    trial / 未定义的档位        → False（不默认放行，fail-closed）
+    member = 档位有效且未开通判断只看它（微信通道看这个判定；trial 不算）
+
+    表里的 all_plugins 是历史字段：2026-09 起插件与能力包全部免费开源，
+    运行时不再按档位放行；现在只有微信通道还看 member。
 
 档位表从哪来（优先级从高到低）：
     1. 环境变量 ASTROSWARM_PLANS_FILE
     2. 包内自带的 qbotmanager/assets/plans.json
     3. 本文件里的 _DEFAULT_PLANS（= 官方 plans.json 的内容）
 
-`full` 不能按 plan 名判：那样月费档和 3 天试用都能把已装的付费包全部解锁，
-与服务端下载口的口径不一致。微信等「付费通道」看的是另一个判定（is_member）。
+`full` 不能按 plan 名判：那样月费档和 3 天试用都会把自己当成「全解锁」；
+微信通道看的是另一个判定（is_member）。
 """
 import json
 import os
@@ -31,7 +31,7 @@ _DEFAULT_PLANS = {
     "yearly": {"all_plugins": False, "min_amount": 0.01},
 }
 
-# 「会员档」= 解锁付费通道（微信等）的档位。trial 不在其中：3 天试用不算会员。
+# 开通了微信通道的档位。trial 不在其中：3 天试用不算。
 MEMBER_PLANS = ("permanent", "monthly", "quarterly", "yearly")
 
 
@@ -80,7 +80,7 @@ def info(plan: str) -> dict:
 
 
 def allows_all(plan: str) -> bool:
-    """该档位是否「全包含」（解锁全部付费包）。没定义 → False，不默认全放行。"""
+    """该档位是否标记 all_plugins（历史字段）。没定义 → False，不默认全放行。"""
     return bool(info(plan).get("all_plugins"))
 
 
@@ -94,7 +94,7 @@ def active(exp) -> bool:
 
 
 def is_member(plan: str, exp) -> bool:
-    """付费会员档且未过期（trial / none / 未定义档位一律 False）。"""
+    """档位有效且已开通（trial / none / 未定义档位一律 False）。"""
     return str(plan or "").strip().lower() in MEMBER_PLANS and active(exp)
 
 

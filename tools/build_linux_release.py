@@ -3,7 +3,7 @@
 
 为什么要有这个脚本：
     给客户下载的包必须是「可复现的一条命令」打出来的，并且打完自动做一次交付物自检，
-    把「包缺文件 / 账号地址写死 / 混进付费包源码 / 敏感串」这类缺陷挡在发布之前。
+    把「包缺文件 / 账号地址写死 / 混进内部文件 / 敏感串」这类缺陷挡在发布之前。
 
 用法（在仓库根目录）：
     python tools/build_linux_release.py
@@ -20,7 +20,7 @@
     astroswarm/app/qbotmanager/**
 
 排除规则（与 tools/export_public.sh 一致，另外更严：嵌套的也算）：
-    * 付费能力包源码：任何 tool_packs/ 之下的 <付费包 id>/（含 eva/bundled/reply-rhythm 这种嵌套）
+    * 内部能力包源码：任何 tool_packs/ 之下的 <包 id>/（含 eva/bundled/reply-rhythm 这种嵌套）
     * _private/、__pycache__、*.pyc/pyo、*.bak*、*.old、.git
     * 服务器私钥 / 明文 IP / 服务器路径 —— 打完再做一次全文扫描，命中直接报错不发布
 """
@@ -36,7 +36,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 
-# 付费能力包：**源码不进客户包**（客户从官网市场按权益下载 zip）
+# 内部能力包：**源码不进客户包**（客户从官网插件市场直接下载 zip）
 PAID_PACK_IDS = {
     "proactive", "memory", "knowledge", "web-search", "timer",
     "group-manager", "reply-rhythm",
@@ -81,7 +81,7 @@ def _forbidden_patterns() -> tuple:
 
 def _skip_dir(rel_parts) -> bool:
     """rel_parts 是**从被复制根算起**的完整相对路径分段（累加），
-    否则 tool_packs 之下嵌套的付费包（如 eva/bundled/reply-rhythm）会被漏掉。"""
+    否则 tool_packs 之下嵌套的包（如 eva/bundled/reply-rhythm）会被漏掉。"""
     if any(p in SKIP_DIR_NAMES for p in rel_parts):
         return True
     for i, part in enumerate(rel_parts):
@@ -134,18 +134,18 @@ def _code_lines(text: str) -> str:
 
 
 def scan_forbidden(root: Path) -> tuple:
-    """交付物自检：全文扫描禁忌字符串 + 付费包残留。"""
+    """交付物自检：全文扫描禁忌字符串 + 内部能力包残留。"""
     hits, warns = [], []
     for path in sorted(root.rglob("*")):
         if not path.is_file():
             continue
         rel = path.relative_to(root).as_posix()
         low = rel.lower()
-        # 付费包名残留（路径里出现 tool_packs/<付费包 id>/）
+        # 内部能力包残留（路径里出现 tool_packs/<包 id>/）
         parts = low.split("/")
         for i, part in enumerate(parts):
             if part == "tool_packs" and any(x in PAID_PACK_IDS for x in parts[i + 1:]):
-                hits.append(f"{rel}: 付费能力包源码残留")
+                hits.append(f"{rel}: 内部能力包源码残留")
         try:
             text = path.read_text(encoding="utf-8", errors="ignore")
         except Exception:  # noqa: BLE001

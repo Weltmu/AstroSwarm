@@ -520,14 +520,14 @@ def ai_platform_env(settings) -> dict:
 
 
 def build_bot_env(settings) -> dict:
-    """构建 NoneBot 进程环境变量（含功能闸门：试用仅 QQ，正式授权解锁微信）。"""
+    """构建 NoneBot 进程环境变量（含功能闸门：未开通微信通道时只开 QQ）。"""
     env = {"PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"}
     if not getattr(settings, "ai_enabled", True):
         env["AI_DISABLED"] = "1"
         return env
     env.update(ai_platform_env(settings))
     gate = lic_mod.feature_gate()
-    # 微信通道看 member（付费会员档），不是 full（= 解锁全部付费能力包）
+    # 微信通道看 member（已开通的档位），不是 full（历史的全解锁字段）
     if not gate.get("member", True):
         env["AI_PLATFORM_WECHAT"] = "0"
     return env
@@ -541,7 +541,7 @@ def start_bot(settings, on_line=None):
     run_py = settings.bot_dir / "run.py"
     if not run_py.exists():
         raise RuntimeError("机器人项目不完整（缺少 bot/run.py），请重新完成部署")
-    # 功能闸门：试用/未激活只允许 QQ 机器人，微信适配器按会员权益同步
+    # 功能闸门：未开通微信通道时只允许 QQ 机器人，微信适配器按权益同步
     gate = lic_mod.feature_gate()
     apply_wechat_gate(settings, full=bool(gate.get("member", True)))
     ensure_ai_plugin(settings)
@@ -559,7 +559,7 @@ def start_bot(settings, on_line=None):
     # 自愈：刷新 .env（保证 LOCALSTORE_USE_CWD 等新配置写入旧部署）
     write_env(settings)
     env = build_bot_env(settings)
-    # 注入已安装能力包：目录 + 按权益允许加载的包列表（会员到期=冻结不加载）
+    # 注入已安装能力包：目录 + 允许加载的包列表（能力包自 2026-09 起全部免费）
     try:
         from . import tool_packs as tool_packs_mod
         env.update(tool_packs_mod.pack_env(settings))

@@ -154,18 +154,16 @@ async function runDeps(kind, onStatus) {
   }
   throw new Error('依赖任务超时（超过 6 分钟）');
 }
-const PAY_URL = 'https://ifdian.net/a/astroswarm';
+const ACTIVATE_URL = 'https://astroswarm.cn/account.html';
 
 /* ── 权益判定的唯一口径────────
-   后端 /api/auth/status 与 /api/plugins/entitlement 现在回三个字段：
-     member      = 付费会员（月费 / 季费 / 年费 / 永久都算）→ 决定「会员」字样、微信通道
-     all_plugins = 解锁全部付费能力包（plans.json 里 all_plugins=true，目前只有永久档）
-     full        = 旧字段，语义已收窄成「解锁全部付费包」= all_plugins，保留兼容旧后端
+   后端 /api/auth/status 与 /api/plugins/entitlement 回三个字段：
+     member      = 档位有效且未过期（微信通道看它）
+     all_plugins = 历史字段（能力包已全部免费开源，运行时不再按它放行）
+     full        = 旧字段 = all_plugins，保留兼容旧后端
 
-   上一轮把后端 full 从「付费会员」收窄成「全解锁」之后，前端 6 处还在读 full，
-   于是月费用户明明是会员，界面上却显示成「免费版」、微信开关显示未解锁
-   （后端其实已经放行）——那是**显示**错，不是权限错。
-   判「会员」一律用 isMember()，判「能不能装付费包」一律用 isFull()，不要直接读 full。 */
+   判定集中在下面两个小函数里，别在页面里直接读 auth.full，
+   否则会出现「后端已经开通、界面显示未开通」的显示错。 */
 const isMember = (a) => Boolean(a?.member) || Boolean(a?.all_plugins) || Boolean(a?.full);
 const isFull = (a) => Boolean(a?.all_plugins) || Boolean(a?.full);
 
@@ -524,9 +522,9 @@ export default function App() {
           <button type="button" className="btn btn--ghost btn--sm" onClick={() => setView('logs')}>
             实时日志
           </button>
-          {/* 会员判据是 member（月/季/年/永久都算）；只有真的什么权益都没有才写「免费版」 */}
+          {/* 通道开通判据是 member；没有权益的账号只写「未开通」 */}
           <StatusChip ok={isMember(auth)} warn={!auth?.email}>
-            {isMember(auth) ? `已授权 · ${auth.plan}` : auth?.email ? '免费版' : '未登录'}
+            {isMember(auth) ? `已开通 · ${auth.plan}` : auth?.email ? '未开通' : '未登录'}
           </StatusChip>
         </div>
       </header>
@@ -752,8 +750,8 @@ function QWeatherCard() {
    （只露标题，任务面板自身隐藏）。面板内所有子行间距 = 面板自身间距 6
    （Qt 的子布局会继承父布局 spacing，所以这里不能用页面的 14）。
    开发者模式关闭时：PyPI / zip 的输入与按钮禁用、「NoneBot 插件市场」整块隐藏。
-   列表项格式取自 _refresh_market_list：`[免费|会员|单买] 名字  v版本  [分类]`。 */
-const PLUGIN_TIER_LABEL = { free: '免费', member: '会员', buy: '单买' };
+   列表项格式取自 _refresh_market_list：`[免费|需开通] 名字  v版本  [分类]`。 */
+const PLUGIN_TIER_LABEL = { free: '免费', member: '需开通', buy: '需开通' };
 const PLUGIN_ITEM_COLOR = { free: '#34D399', member: '#22D3EE', buy: '#22D3EE' };
 
 /** 插件详情页：介绍 / 功能 / 可调参数（写 <data_home>/tool_packs/<id>/config.json）。 */
@@ -783,10 +781,10 @@ function PluginDetail({ pid, entry, auth, onBack }) {
   useEffect(loadEnt, [pid]);
 
   const price = entry?.price;
-  const buyUrl = entry?.buy_url || entry?.url || '';
+  const buyUrl = ACTIVATE_URL;   // 开通用账号中心；市场清单里的旧购买链接不再使用
   const owned = Boolean(ent && (ent.owned_plugins || []).includes(pid));
-  // 「能不能用这个付费包」看 all_plugins（后端运行时闸门 deploy._allowed_packs /
-  // tools._entitled 也是这个口径）：月费档只放行单独买断的包，不解锁全部付费包。
+  // 能力包已全部免费开源：这里只做「装了就能用」的兜底判断，
+  // 旧清单里带 tier 的条目按后端口径（all_plugins / 已登记）放行。
   const locked = Boolean(entry && entry.tier && entry.tier !== 'free') && !owned && !isFull(ent);
 
   const redeem = async () => {
@@ -926,14 +924,11 @@ function PluginDetail({ pid, entry, auth, onBack }) {
         <h2 className="card__title">介绍</h2>
         <div className="stat-row">
           <span>价格</span>
-          <b>
-            {price == null ? '免费' : `¥${price}`}
-            {price != null ? '（买断 · 永久可用）' : ''}
-          </b>
+          <b>{price == null ? '免费' : `¥${price}`}</b>
         </div>
         <div className="stat-row">
           <span>拥有状态</span>
-          <b>{price == null ? '免费，无需购买' : owned ? '已购买（永久）' : isFull(ent) ? '会员期内可用' : '未购买'}</b>
+          <b>{price == null || owned || isFull(ent) ? '可以直接安装' : '需要先开通'}</b>
         </div>
         <p className="card__note">{d?.description || '（这个插件没有写介绍）'}</p>
         {price == null ? (
@@ -943,7 +938,7 @@ function PluginDetail({ pid, entry, auth, onBack }) {
           </p>
         ) : owned ? (
           <p className="card__note">
-            你已经<b>买断</b>了这个插件（永久可用）：点「安装这个插件」即可，重启机器人后生效；
+            这个插件已经登记在你账号下：点「安装这个插件」即可，重启机器人后生效；
             官网「插件市场」里它也会显示「已拥有」，随时能重新下载。
           </p>
         ) : (
@@ -955,16 +950,16 @@ function PluginDetail({ pid, entry, auth, onBack }) {
                   className="btn btn--primary"
                   onClick={() => window.open(buyUrl, '_blank')}
                 >
-                  {`购买 ¥${price}`}
+                  {'去账号中心开通'}
                 </button>
               )}
               <button type="button" className="btn" disabled={busy} onClick={refreshEnt}>
-                我已付款，刷新权益
+                已开通，刷新权益
               </button>
             </div>
             <p className="card__note">
-              付款页请填<b>你的星群账号邮箱</b>，付完点「我已付款，刷新权益」一般几秒内开通；
-              也可以在官网插件市场购买与下载。买断制：付一次永久可用，不会每月扣费。
+              开通入口在账号中心（astroswarm.cn）：填<b>你的星群账号邮箱</b>，
+              开通后点「已开通，刷新权益」，一般几秒内生效。
             </p>
             <div className="p-row">
               <input
@@ -979,8 +974,8 @@ function PluginDetail({ pid, entry, auth, onBack }) {
               </button>
             </div>
             <p className="card__note">
-              兑换码是<b>人工兜底</b>用的：如果付款后没自动开通（比如付款页邮箱填错了），
-              找我要一个码填在这里兑换，立刻开通。正常付款不需要它。
+              兑换码是<b>人工兜底</b>用的：开通后权益没自动同步过来（比如账号邮箱填错了），
+              找我要一个码填在这里兑换即可。
             </p>
           </>
         )}
@@ -1048,7 +1043,7 @@ function Plugins({ auth, onDetail = () => {} }) {
   const [packId, setPackId] = useState('');
   const [pyPackage, setPyPackage] = useState('');
   const [zipPath, setZipPath] = useState('');
-  // 已买断的插件 id（列表里标「✓已拥有」，并让它们可安装）
+  // 已登记的插件 id（列表里标「✓已拥有」，并让它们可安装）
   const [ownedPlugins, setOwnedPlugins] = useState([]);
   const [qweather, setQweather] = useState(false);
   const [msg, setMsg] = useState('');
@@ -1069,7 +1064,7 @@ function Plugins({ auth, onDetail = () => {} }) {
 
   /* 未登录时这一页的四块数据全都读不到（/api/tools/status、/api/plugins/entitlement、
      /api/plugins/installed 都鉴权）。以前每处都是 .catch(() => {})，静默吞掉：
-     表现是「已装能力包空列表」「付费插件全显示未购买」，用户以为功能没了。
+     表现是「已装能力包空列表」「插件全显示未开通」，用户以为功能没了。
      现在统一记一句实话，并在对应卡片上显示，不再把「没登录」装成「没有数据」。 */
   const [needLogin, setNeedLogin] = useState(false);
   const fail = (e, what) => {
@@ -1099,11 +1094,11 @@ function Plugins({ auth, onDetail = () => {} }) {
           setStatus('插件商店暂不可用或暂无内容，可稍后点「刷新」重试');
           return;
         }
-        // 「当前账号」按 member 判：月费/季费/年费用户也是会员，不能写「免费版」
-        const plan = auth?.email ? (isMember(auth) ? '会员' : '免费版') : '未登录星群账号（仅能安装免费插件）';
+        // 「当前账号」按 member 判；没有权益的账号写「未开通」
+        const plan = auth?.email ? (isMember(auth) ? '已开通' : '未开通') : '未登录星群账号（插件不受影响）';
         const locked = list.filter((e) => tier(e) !== 'free').length;
         setStatus(
-          `插件商店已加载：${list.length} 个 · 当前账号：${plan}` + (locked ? ` · ${locked} 个需会员/单买` : ''),
+          `插件商店已加载：${list.length} 个 · 当前账号：${plan}` + (locked ? ` · ${locked} 个需开通` : ''),
         );
       })
       .catch((e) => setStatus(`插件商店加载失败：${e.message}（可点「刷新」重试）`));
@@ -1116,7 +1111,7 @@ function Plugins({ auth, onDetail = () => {} }) {
     get('/api/console/dev-mode')
       .then((d) => setDevMode(Boolean(d.developer_mode)))
       .catch((e) => fail(e, '开发者模式'));
-    // 已单独购买（买断）的插件：以前只认会员标记，买断用户会被判成"没权限"装不上
+    // 已登记的插件：以前只认开通标记，会被判成「没权限」装不上
     get('/api/plugins/entitlement')
       .then((d) => setOwnedPlugins((d.owned_plugins || []).map(String)))
       .catch((e) => fail(e, '已购插件权益'));
@@ -1135,7 +1130,7 @@ function Plugins({ auth, onDetail = () => {} }) {
       return;
     }
     if (!allowed(entry)) {
-      setMsg(`「${entry.name}」需要会员或单独购买，请先开通会员`);
+      setMsg(`「${entry.name}」需要先在账号中心开通，开通后再点安装`);
       return;
     }
     try {
@@ -1250,7 +1245,7 @@ function Plugins({ auth, onDetail = () => {} }) {
         <section className="card pl-panel">
           <h2 className="card__title">插件商店</h2>
           <p className="card__note">
-            直连星群服务器拉取插件清单；安装前自动校验适配器兼容性与 SHA256。免费插件人人可装；会员插件需开通会员或单独购买后安装。
+            直连星群服务器拉取插件清单；安装前自动校验适配器兼容性与 SHA256。插件全部免费、源码开源，直接装即可。
           </p>
 
           <div className="p-row">
@@ -1269,13 +1264,13 @@ function Plugins({ auth, onDetail = () => {} }) {
             <button
               type="button"
               className="btn btn--ghost"
-              title="去官网插件市场看价格并购买（买断制，付一次永久可用）"
+              title="去官网插件市场看介绍与下载（astroswarm.cn/plugins.html）"
               onClick={() => {
                 window.open('https://astroswarm.cn/plugins.html', '_blank', 'noopener');
-                setMsg('已打开插件市场：付款后回到本页「插件管理 → 详情 → 我已付款，刷新权益」即可生效');
+                setMsg('已打开插件市场：装插件直接用左边的列表，这里只是去看介绍和下载 zip');
               }}
             >
-              开通会员
+              插件市场
             </button>
             <button type="button" className="btn btn--primary" onClick={install}>
               安装
@@ -1292,7 +1287,7 @@ function Plugins({ auth, onDetail = () => {} }) {
                   onClick={() => setPicked(String(e.id))}
                   title={e.description || ''}
                 >
-                  {`[${PLUGIN_TIER_LABEL[tier(e)] || '免费'}] ${e.name}  v${e.version}  [${e.category || '未分类'}]  ${e.price != null ? `¥${e.price} 买断` : '免费'}${isOwned(e) ? '  ✓已拥有' : ''}`}
+                  {`[${PLUGIN_TIER_LABEL[tier(e)] || '免费'}] ${e.name}  v${e.version}  [${e.category || '未分类'}]  免费${isOwned(e) ? '  ✓已拥有' : ''}`}
                 </button>
                 <button
                   type="button"
@@ -1310,7 +1305,7 @@ function Plugins({ auth, onDetail = () => {} }) {
           {needLogin && (
             <p className="card__note">
               {LOGIN_HINT}：下面「已装能力包 / 已安装 / 本地插件」三块都会是空的，
-              付费插件的「已购」标记也读不到 —— 不是这些插件不存在。
+              需要开通的插件也读不到开通状态 —— 不是这些插件不存在。
             </p>
           )}
           <p className="card__note">已装能力包</p>
@@ -2608,7 +2603,7 @@ function Overview({ health, auth, services, config, loggedIn, onAccess, onMessag
   const problems = [];
   if (!botOn) problems.push(deployed ? '机器人进程没在跑：点下面的按钮启动。' : '机器人还没部署过：先启动一次，部署脚本会装好运行环境。');
   else if (!qqLinked) problems.push(`QQ 通道未连接（当前：${qqReason}）：协议端没连上，QQ 现在收不到消息，去「接入 → QQ」核对反向 WS 地址。`);
-  if (!wxOn) problems.push('微信通道未解锁：免费版只有 QQ，按买断制解锁后可用（付一次永久可用）。');
+  if (!wxOn) problems.push('微信通道未开通：当前只有 QQ 通道，去账号中心开通后就能用微信。');
   const botPort = config?.bot_port || health?.bot_port || 12113;
   const clock = now.toTimeString().slice(0, 8);
   const wsUrl = `ws://${window.location.hostname || '127.0.0.1'}:${botPort}/onebot/v11/ws`;
@@ -2633,8 +2628,8 @@ function Overview({ health, auth, services, config, loggedIn, onAccess, onMessag
         }
       : !wxOn
         ? {
-            title: '微信通道未解锁',
-            hint: '免费版只支持 QQ；微信按买断制解锁，付一次永久可用。',
+            title: '微信通道未开通',
+            hint: '当前只有 QQ 通道；微信通道去账号中心开通后即可用。',
             primary: { label: '去接入', onClick: onAccess },
             secondary: [{ label: '重启机器人', onClick: restartBot }],
           }
@@ -2788,9 +2783,9 @@ function Overview({ health, auth, services, config, loggedIn, onAccess, onMessag
 
 function WeChatBody({ auth, onMessages }) {
   // 微信闸门 = member（后端 deploy.apply_wechat_gate 读的就是 feature_gate()["member"]）。
-  // 以前读 full，后端收窄 full 之后月费用户会被判成「付费解锁」——后端其实是开的。
+  // 以前读 full，后端收窄 full 之后已开通的账号会被判成「未开通」——后端其实是开的。
   const member = isMember(auth);
-  const reason = auth?.reason || '免费版仅支持 QQ 机器人，付费后解锁微信（权益未通过签名校验）';
+  const reason = auth?.reason || 'QQ 通道可用；微信通道未开通（本机权益未通过签名校验）';
   // 微信通道（iLink）：状态和二维码都由后端从适配器落的文件里读，前端只做展示与触发
   const [wx, setWx] = useState(null);
   const [code, setCode] = useState('');
@@ -2818,7 +2813,7 @@ function WeChatBody({ auth, onMessages }) {
   const qrFresh = qrUrl && (wx?.qrcode_age ?? 999) < 110;   // 二维码 2 分钟一换
   const loggedIn = Boolean(wx?.logged_in);
   const tone = loggedIn ? 'success' : member && qrUrl ? 'warn' : 'stopped';
-  const stateText = loggedIn ? '已连接' : !member ? '付费解锁' : qrUrl ? '等待扫码' : '未登录';
+  const stateText = loggedIn ? '已连接' : !member ? '未开通' : qrUrl ? '等待扫码' : '未登录';
 
   /* 「重新扫码登录」的按钮名看起来只是刷新一张图，后端实现却是 /api/wechat/relogin
      = 清登录态 + 重启机器人（console_ext 的 relogin），会打断正在进行的对话、
@@ -2881,9 +2876,9 @@ function WeChatBody({ auth, onMessages }) {
     <>
       {!member && (
         <>
-          <p className="gate-lock">{reason}。付费后自动解锁微信通道。</p>
-          <a className="btn btn--ghost btn--block" href={PAY_URL} target="_blank" rel="noreferrer">
-            解锁微信通道（买断制，付一次永久可用）
+          <p className="gate-lock">{reason}。开通后即可扫码登录。</p>
+          <a className="btn btn--ghost btn--block" href={ACTIVATE_URL} target="_blank" rel="noreferrer">
+            去账号中心开通微信通道
           </a>
         </>
       )}
@@ -3336,7 +3331,7 @@ function AccessPage({ auth, config, health, services, onSaved, onMessages }) {
   };
 
   const wxSummary = !wxOn
-    ? '免费版仅 QQ；按买断制解锁后可用（付一次永久可用）'
+    ? '微信通道未开通：当前只有 QQ 通道，去账号中心即可开通'
     : wxErr === 'login'
       ? `${LOGIN_HINT}：微信状态读不到`
       : wxErr
@@ -4038,8 +4033,8 @@ function Settings({
             <h2 className="card__title">星群账号</h2>
             <p className="card__note">
               {auth?.email
-                ? `已登录：${auth.email}。插件购买、权益刷新都用这个邮箱。`
-                : '未登录：只能安装免费插件；买断后的插件与权益要登录才能同步。'}
+                ? `已登录：${auth.email}。通道开通与插件安装都跟着这个邮箱走。`
+                : '未登录：插件照常免费安装；微信通道的开通状态要登录后才能同步。'}
             </p>
             {loggedIn ? (
               <div className="p-row">
@@ -4076,14 +4071,14 @@ function Settings({
                 <span>套餐 / 权益</span>
                 <b>
                   {isMember(auth)
-                    ? `${isFull(auth) ? '付费版 · 全功能' : '会员'}${auth?.plan ? `（${auth.plan}）` : ''}`
-                    : '免费版（仅 QQ）'}
+                    ? `${isFull(auth) ? '已开通 · 全功能' : '已开通'}${auth?.plan ? `（${auth.plan}）` : ''}`
+                    : '未开通（仅 QQ）'}
                 </b>
               </div>
             </div>
             {!isMember(auth) && (
-              <a className="btn btn--ghost btn--self" href={PAY_URL} target="_blank" rel="noreferrer">
-                解锁全部功能（买断制，付一次永久可用）
+              <a className="btn btn--ghost btn--self" href={ACTIVATE_URL} target="_blank" rel="noreferrer">
+                去账号中心开通（含微信通道）
               </a>
             )}
           </section>

@@ -91,7 +91,7 @@ if [ "$WITH_DEPS" = "1" ]; then
   "$VPY" -m pip install -q --upgrade pip
   INDEX="${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}"
   # ⚠ 这些一个都不能少：
-  #   pynacl       —— 市场清单验签 + 付费权益验签；缺了会被当成「清单可能被篡改」并按免费版跑
+  #   pynacl       —— 市场清单验签 + 权益验签；缺了会被当成「清单可能被篡改」并按未开通跑
   #   cryptography —— 和风天气私钥生成
   #   segno        —— 微信登录二维码渲染（缺了二维码接口 503）
   #   httpx        —— 账号服务 / iLink 调用

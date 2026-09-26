@@ -132,8 +132,8 @@ def auth_status(authorization: str = FastAPIHeader("", alias="Authorization")):
     未登录不返回本机账号邮箱与套餐。
 
     未登录分支与 auth.feature_gate() 保持同一组字段（含 member / all_plugins）：
-    前端按 member 判「会员」、按 all_plugins 判「能不能装付费包」，少一个字段
-    就会被读成 undefined，界面会退回「免费版」。
+    前端按 member 判「通道是否开通」、按 all_plugins 判「能不能装」，少一个字段
+    就会被读成 undefined，界面会退回「未开通」。
     """
     try:
         _require_auth(authorization)

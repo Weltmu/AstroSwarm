@@ -679,7 +679,7 @@ def test_run_page_reverse_ws_panel():
 
 
 def test_free_tier_pay_entries_exist():
-    """首页与微信页在免费版下应提供「解锁微信」付费入口。"""
+    """首页与微信页在未开通微信通道时应提供「开通微信通道」入口。"""
     import tempfile
     from pathlib import Path
 
@@ -696,7 +696,7 @@ def test_free_tier_pay_entries_exist():
     s.bg_video_enabled = False
     s.bg_image_enabled = False
     s.save()
-    # 隔离本机真实授权：测试环境固定为免费版（本机账号已是永久，直接读会误判）
+    # 隔离本机真实授权：测试环境固定为未开通（本机账号已是永久，直接读会误判）
     from qbotmanager.core import license as lic
     orig_license_file = lic.license_file
     lic.license_file = lambda: tmp / "license.json"
@@ -705,17 +705,17 @@ def test_free_tier_pay_entries_exist():
     app.processEvents()
 
     home = win.pages[0]
-    assert hasattr(home, "wx_pay_btn"), "首页缺少解锁微信按钮"
-    assert home.wx_pay_btn.text() == "解锁微信"
+    assert hasattr(home, "wx_pay_btn"), "首页缺少开通微信通道按钮"
+    assert home.wx_pay_btn.text() == "开通微信通道"
 
     wechat = next(
         (p for p in win.pages if type(p).__name__ == "WechatPage"), None
     )
-    assert wechat is not None and hasattr(wechat, "btn_pay"), "微信页缺少付费解锁按钮"
-    assert "解锁微信" in wechat.btn_pay.text()
+    assert wechat is not None and hasattr(wechat, "btn_pay"), "微信页缺少开通微信通道按钮"
+    assert "开通微信通道" in wechat.btn_pay.text()
 
     sp = win.pages[win._page_index["设置"]]
-    assert sp.info_labels["license_status"].text() == "免费版（仅 QQ 通道）"
+    assert sp.info_labels["license_status"].text() == "仅 QQ 通道"
     assert "机器码" not in sp.info_labels["license_status"].toolTip()
 
     lic.license_file = orig_license_file
@@ -820,7 +820,8 @@ def test_access_page_lists_all_channels():
         text = badge.label.text()
         assert text and ("·" in text), (key, text)
         assert any(word in text for word in
-                   ("运行中", "已停止", "未连接", "未登录", "已连接", "未安装", "解锁", "规划中")), text
+                   ("运行中", "已停止", "未连接", "未登录", "已连接", "未安装",
+                    "未开通", "规划中")), text
 
     # 「去配置」跳到真实通道页
     ap._rows["qq"][1].click()

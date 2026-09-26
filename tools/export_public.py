@@ -10,7 +10,7 @@
 
 导出规则（只取被 git 跟踪的文件）：
     * 服务器运维 / 授权服务 / 语料工具 / 本机脚本
-    * 全部能力包（含此前的付费包：proactive / memory / knowledge / web-search /
+    * 全部能力包（含此前的内部包：proactive / memory / knowledge / web-search /
       timer / group-manager / reply-rhythm）自 2026-09 起随主仓库开源，不再排除
     * _private/、__pycache__、*.pyc、*.bak*、*.old
 导出后自动复扫一遍敏感串，命中即非 0 退出。
@@ -42,7 +42,7 @@ PRIVATE_RE = re.compile(
     r")"
 )
 
-# 2026-09 起插件全部免费开源（用户决定），原先排除付费能力包源码的规则已停用。
+# 2026-09 起插件全部免费开源，原先排除部分能力包源码的规则已停用。
 # 这里保留一个永不匹配的正则：将来若又要排除，把原来的表达式贴回来即可。
 PAID_PACK_RE = re.compile(r"(?!)")
 
