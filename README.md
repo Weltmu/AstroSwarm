@@ -96,6 +96,7 @@ sudo bash install.sh --systemd --port 7860
 | 机器人收到消息却不回 | 检查「AI 大脑」里的平台开关与 API Key；智能体档案模式下要填 `agent_owner_qq` |
 | 微信扫码后没反应 | 二维码 2 分钟一换，点「重新扫码登录」；确认 `segno` 已装（安装脚本会装） |
 | QQ 通道显示未连接 | 反向 WS 需要协议端（NapCat/LLOneBot）连到 `ws://<主机>:<bot_port>/onebot/v11/ws` |
+| 微信通道必须付费吗 | 适配器源码就在本仓库，你可以自己接；付费买的是官方开通 + 扫码答疑 + 通道维护与更新。QQ 通道与全部能力包不收费 |
 | 配置读不出来 | 日志里会有 `config.json 解析失败`，坏文件已另存 `.corrupt.*`，**能救回的字段（含登录态 account_token）已自动抢救**，其余字段回默认值；要整份回滚就用上一份好配置 `config.json.bak`（控制台「设置 → 回滚配置」或 `POST /api/config/restore-last-good`） |
 | 登录页报「连不上星群账号服务」 | 账号服务地址不对或网络不通：改 `config.json` 的 `account_base`（或 `ASTROSWARM_ACCOUNT_BASE`） |
 
@@ -115,10 +116,17 @@ PYTHONPATH=src pytest tests -q
 - 交付包验收：`python tools/verify_linux_package.py <解包后的目录>`
 - 公开导出：`python tools/export_public.py <输出目录>`（导出后自动复扫敏感串；**不要直接 push 现有历史**，见脚本里的说明）
 
-## 六、许可与边界
+## 六、许可、开源范围与收费
 
-- 本仓库（Windows 桌面端、Linux 无头端、网页控制台）：Apache-2.0（见 `LICENSE`）
-- 官网后端、账号与签发服务、服务器运维脚本属于私有部分，不在公开范围
+**开源范围**：Windows 桌面端、Linux 无头端、网页控制台，以及全部能力包 / 插件 / 人设包（含微信 iLink 适配器 `src/qbotmanager/assets/plugins/nonebot_adapter_ilink/`）都在本仓库，Apache-2.0（见 `LICENSE`）。仓库里没有"留一手的付费代码"——你自己接、自己改、自己部署都行。
+
+**不收费的部分**：QQ 通道（官方 QQ 机器人或自备 OneBot 协议端）、AI 大脑（人设、记忆、主动聊天、群管理）、插件市场里的全部能力包（点歌、天气、定时提醒、打卡打工、知识库等），装好即用，不需要任何授权。
+
+**收费的只有一项**：微信通道开通。收的不是代码，是开通、扫码答疑、通道维护与后续更新（微信走腾讯官方 iLink 通道）。你完全可以不付费、用仓库里的适配器自己接，只是那部分不含官方支持。
+
+其他边界：
+
+- 官网后端、账号与签发服务、服务器运维脚本属于私有部分，不在公开范围；客户端可以指向自建的账号服务（`account_base` / `ASTROSWARM_ACCOUNT_BASE` / `install.sh --account-base`）
 - QQ 接入使用 OneBot 标准协议，**协议端（如 LLOneBot / NapCat）由用户自行安装和使用**，本项目不内置、不分发任何 QQ 协议端；使用第三方协议存在账号风险，请用小号测试、风险自担
 - 微信使用腾讯官方 iLink 通道，能力以平台官方限制为准
 - 使用云端大模型时，对话内容会发送给所选模型服务商
