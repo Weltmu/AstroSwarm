@@ -1,0 +1,95 @@
+/* 由 gen_tokens.py 从 D:\ai\QBotManager\src\qbotmanager\ui\theme.py 自动生成，勿手改 */
+:root {
+  --as-accent: #3D6BFF;
+  --as-accent-hover: #5A85FF;
+  --as-accent-active: #2F5CE8;
+  --as-accent-soft: rgba(61,107,255,0.16);
+  --as-accent-glow: rgba(61,107,255,0.45);
+  --as-bg-0: #0B0E14;
+  --as-bg-1: #111722;
+  --as-panel: rgba(17,22,34,0.62);
+  --as-panel-strong: rgba(19,26,40,0.78);
+  --as-panel-solid: #141A26;
+  --as-border-light: rgba(255,255,255,0.08);
+  --as-border-strong: rgba(255,255,255,0.14);
+  --as-text: #F2F5FA;
+  --as-text-2: #A7B1C2;
+  --as-text-3: #7E8A9C;
+  --as-success: #34D399;
+  --as-danger: #F87171;
+  --as-warn: #FBBF24;
+  --as-info: #60A5FA;
+  --as-neutral: #8A94A6;
+  --as-status-running: #34D399;
+  --as-status-connected: #34D399;
+  --as-status-success: #34D399;
+  --as-status-ok: #34D399;
+  --as-status-stopped: #F87171;
+  --as-status-failed: #F87171;
+  --as-status-error: #F87171;
+  --as-status-warning: #FBBF24;
+  --as-status-warn: #FBBF24;
+  --as-status-pending: #FBBF24;
+  --as-status-info: #60A5FA;
+  --as-status-unknown: #8A94A6;
+  --as-status-idle: #8A94A6;
+  --as-radius: 12px;
+  --as-radius-sm: 8px;
+  --as-window-radius: 14px;
+  --as-font-sans: "Microsoft YaHei UI", "Segoe UI", sans-serif;
+  --as-font-mono: "Cascadia Mono", Consolas, monospace;
+}
+
+[data-accent="default"] {
+  --as-accent: #3D6BFF;
+  --as-accent-hover: #5A85FF;
+  --as-accent-active: #2F5CE8;
+  --as-accent-soft: rgba(61,107,255,0.16);
+  --as-accent-glow: rgba(61,107,255,0.45);
+  --as-accent-name: "深邃蓝";
+}
+
+[data-accent="midnight"] {
+  --as-accent: #8B5CF6;
+  --as-accent-hover: #A78BFA;
+  --as-accent-active: #7C3AED;
+  --as-accent-soft: rgba(139,92,246,0.18);
+  --as-accent-glow: rgba(139,92,246,0.45);
+  --as-accent-name: "暗夜紫";
+}
+
+[data-accent="cyber"] {
+  --as-accent: #22D3EE;
+  --as-accent-hover: #67E8F9;
+  --as-accent-active: #0891B2;
+  --as-accent-soft: rgba(34,211,238,0.15);
+  --as-accent-glow: rgba(34,211,238,0.40);
+  --as-accent-name: "赛博青";
+}
+
+[data-accent="sunset"] {
+  --as-accent: #F59E0B;
+  --as-accent-hover: #FBBF24;
+  --as-accent-active: #D97706;
+  --as-accent-soft: rgba(245,158,11,0.15);
+  --as-accent-glow: rgba(245,158,11,0.40);
+  --as-accent-name: "暖阳橙";
+}
+
+[data-accent="forest"] {
+  --as-accent: #34D399;
+  --as-accent-hover: #6EE7B7;
+  --as-accent-active: #059669;
+  --as-accent-soft: rgba(52,211,153,0.15);
+  --as-accent-glow: rgba(52,211,153,0.40);
+  --as-accent-name: "薄荷绿";
+}
+
+[data-accent="slate"] {
+  --as-accent: #22C55E;
+  --as-accent-hover: #4ADE80;
+  --as-accent-active: #16A34A;
+  --as-accent-soft: rgba(34,197,94,0.16);
+  --as-accent-glow: rgba(34,197,94,0.42);
+  --as-accent-name: "深空绿（新色板）";
+}
