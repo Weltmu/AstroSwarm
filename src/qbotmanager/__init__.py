@@ -1,2 +1,2 @@
 APP_NAME = "AstroSwarm"
-APP_VERSION = "1.2.5"
+APP_VERSION = "1.2.6"

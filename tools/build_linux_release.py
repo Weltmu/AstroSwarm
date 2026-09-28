@@ -133,6 +133,11 @@ def _code_lines(text: str) -> str:
     return "\n".join(out)
 
 
+def _strip_docs(text: str) -> str:
+    """去掉三引号文档字符串：判断「真的把权益收口」时别被说明文字误伤。"""
+    return re.sub(r'"""(?:.|\n)*?"""', "", text)
+
+
 def scan_forbidden(root: Path) -> tuple:
     """交付物自检：全文扫描禁忌字符串 + 内部能力包残留。"""
     hits, warns = [], []
@@ -191,15 +196,22 @@ def check_deliverable(root: Path, version: str) -> list:
         problems.append("auth.py 没有环境变量回退 ASTROSWARM_ACCOUNT_BASE")
 
     dep = (app / "deploy.py").read_text(encoding="utf-8") if (app / "deploy.py").exists() else ""
-    if "all_plugins" not in dep:
-        problems.append("deploy.py 的运行时闸门没有读 plans.json 的 all_plugins")
+    dep_code = _code_lines(_strip_docs(dep))
+    # 2026-09 起能力包全部免费（随主仓库开源）：只有微信通道还看权益（member / full）
+    if "apply_wechat_gate" not in dep_code:
+        problems.append("deploy.py 没有同步微信通道闸门（apply_wechat_gate）")
+    elif "member" not in dep_code:
+        problems.append("deploy.py 的微信闸门没有读 member（会员/永久档）")
+    if "owned_plugins" in dep_code:
+        problems.append("deploy.py 又按 owned_plugins 收口能力包（2026-09 起全部免费）")
 
     tls = (app / "tools.py").read_text(encoding="utf-8") if (app / "tools.py").exists() else ""
+    tls_code = _code_lines(_strip_docs(tls))
     # 只看真正的返回语句，别被注释/文档里「以前是 plan != "none"」这句话误伤
-    if re.search(r"return\s+plan\s*!=\s*[\"']none[\"']", _code_lines(tls)):
-        problems.append("tools.py 还按 plan 名判全解锁（应读 all_plugins）")
-    if "all_plugins" not in tls and 'get("full")' not in tls:
-        problems.append("tools.py 没有读 all_plugins / feature_gate")
+    if re.search(r"return\s+plan\s*!=\s*[\"']none[\"']", tls_code):
+        problems.append("tools.py 还按 plan 名判全解锁（2026-09 起全部免费）")
+    if not re.search(r"def _entitled\(.*?return True", tls_code, re.S):
+        problems.append("tools.py 的 _entitled 不再恒为 True（2026-09 起插件全部免费）")
 
     init_src = (app / "__init__.py").read_text(encoding="utf-8") if (app / "__init__.py").exists() else ""
     if version not in init_src:

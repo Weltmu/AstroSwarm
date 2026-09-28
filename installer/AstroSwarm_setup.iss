@@ -9,7 +9,7 @@
 ; 不带 /DEPLOYROOT 时，机器人环境默认装到安装目录下的「机器人」子文件夹（跟着安装目录走）。
 
 #define MyAppName "AstroSwarm 星群"
-#define MyAppVersion "1.2.5"
+#define MyAppVersion "1.2.6"
 #define MyAppExeName "AstroSwarm.exe"
 
 [Setup]

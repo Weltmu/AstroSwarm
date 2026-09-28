@@ -3,7 +3,7 @@ import os
 
 APP_NAME = "AstroSwarm"
 APP_DISPLAY = "AstroSwarm 星群"
-APP_VERSION = "1.2.5"
+APP_VERSION = "1.2.6"
 
 # ---- Python runtime (for the bot) ----
 # 使用 embeddable 精简版：纯解压、不写注册表、不需要管理员权限，
