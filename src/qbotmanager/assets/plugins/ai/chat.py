@@ -68,7 +68,12 @@ def _extract_json_text(text: str) -> str:
 
 # 定义本地工具列表
 from qbotmanager.core.agent.runtime import get_runtime
-from qbotmanager.core.agent.tool import ToolContext
+from qbotmanager.core.agent.tool import (
+    ToolContext,
+    ToolPermissionError,
+    ToolUnavailableError,
+)
+from .tools_bridge import build_tool_context, execute_tool_with_actions
 
 _TOOL_PERMISSIONS = {
     "send_message",
@@ -79,9 +84,13 @@ _TOOL_PERMISSIONS = {
     "media",
 }
 
-async def get_chat_reply_with_tools(messages: list, is_group: bool = False) -> str:
+async def get_chat_reply_with_tools(messages: list, is_group: bool = False,
+                                    msg=None, channel=None) -> str:
     """
     结合function call和分段回复的聊天回复函数 - 使用消息副本处理工具调用
+
+    msg / channel：当前消息与通道发送器（brain 传入）。传了就按通道裁剪工具、
+    把发送/记忆/提醒/动作回执接进工具上下文；不传时行为与旧版完全一致。
     """
     # 检查全局开关
     if not chat_manager.is_chat_enabled():
@@ -104,7 +113,13 @@ async def get_chat_reply_with_tools(messages: list, is_group: bool = False) -> s
         
         # 获取工具列表
         runtime = get_runtime()
-        all_tools = runtime.schemas().copy()  # 本地 + 已装工具包
+        platform = str(getattr(msg, "platform", "") or "")
+        all_tools = runtime.schemas(platform).copy()  # 本地 + 已装工具包（按通道裁剪）
+        tool_ctx = (
+            build_tool_context(msg, channel)
+            if msg is not None and channel is not None
+            else ToolContext(permissions=_TOOL_PERMISSIONS)
+        )
         
         # 检查是否有启用的MCP服务器
         enabled_servers = chat_manager.get_enabled_mcp_servers()
@@ -177,11 +192,16 @@ async def get_chat_reply_with_tools(messages: list, is_group: bool = False) -> s
                 # 判断是本地工具还是MCP工具
                 if runtime.registry.get(function_name):
                     # 调用 Agent 工具（内置/工具包）
-                    function_result = runtime.execute(
-                        function_name,
-                        function_args,
-                        ToolContext(permissions=_TOOL_PERMISSIONS),
-                    )
+                    try:
+                        function_result = await execute_tool_with_actions(
+                            runtime, function_name, function_args, tool_ctx)
+                    except (ToolPermissionError, ToolUnavailableError,
+                            KeyError) as exc:
+                        # 通道不支持 / 权限不够：如实告诉模型，让它按人设解释
+                        function_result = json.dumps(
+                            {"ok": False, "error": "tool_unavailable",
+                             "detail": str(exc)},
+                            ensure_ascii=False)
                     logger.info(f"Agent 工具结果: {function_result}")
                     
                     processing_messages.append({

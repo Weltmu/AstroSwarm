@@ -28,13 +28,15 @@ async def build_channel_from_wechat(chat_handler, bot, event):
         is_superuser=True,  # ClawBot 私密通道：扫码绑定微信账号即为机器人唯一管理员
     )
 
-    async def send_text(t: str) -> None:
+    async def send_text(t: str) -> bool:
         ok = await bot.send(event, t)
         logger.info(f"[wechat] 发送回复 {'成功' if ok else '失败'}: {t[:80]}")
+        return bool(ok)
 
-    async def send_text_at(t: str) -> None:
+    async def send_text_at(t: str) -> bool:
         ok = await bot.send(event, t)
         logger.info(f"[wechat] 发送回复 {'成功' if ok else '失败'}: {t[:80]}")
+        return bool(ok)
 
     async def notify_error(err: str) -> None:
         logger.error(f"[wechat] {err}")

@@ -26,6 +26,7 @@ ICONS = {
     "arrow-right": 0xE06C,
     "lifebuoy": 0xE63A,
     "sparkle": 0xE6A2,
+    "magic-wand": 0xE6A8,
     "robot": 0xE762,
 }
 

@@ -78,6 +78,14 @@ const ICONS = {
     'M4 8.4 12 12.8l8-4.4',
     'M12 12.8V20',
   ],
+  wand: [
+    'M4.5 19.5 14.5 9.5',
+    'M14 5.5 18.5 10',
+    'M18 2.6 18 5.4',
+    'M20.7 4 17.9 4',
+    'M9 2.6 9 5.4',
+    'M10.4 4 7.6 4',
+  ],
   terminal: [
     'M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z',
     'M3 8.6h18',
@@ -234,6 +242,7 @@ const NAV_GROUPS = [
     items: [
       ['brain', 'AI 大脑', 'brain'],
       ['plugins', '插件管理', 'puzzle'],
+      ['workshop', '插件工坊', 'wand'],
     ],
   },
   {
@@ -249,7 +258,7 @@ const NAV_GROUPS = [
   },
 ];
 // 桌面端 ADVANCED_PAGES：小白模式（默认开启）下隐藏这些入口，可在「设置」里关掉
-const ADVANCED_PAGES = ['messages', 'plugins', 'logs', 'deps'];
+const ADVANCED_PAGES = ['messages', 'plugins', 'workshop', 'logs', 'deps'];
 const BEGINNER_KEY = 'as_beginner_mode';
 
 /* UI v2 重排后，styles.css 自动区那批「按页钉死」的定位规则（.page > section:nth-child(n) …）
@@ -323,6 +332,243 @@ function Field({ label, children }) {
       <span>{label}</span>
       {children}
     </label>
+  );
+}
+
+/* 插件工坊：说需求 → AI 写插件 → 自动检查 + 沙箱试跑 → 装进机器人。
+   还能导出 / 导入插件包、按运行期真实报错让 AI 修一版、上传到官网等站长审核。
+   后台接口都在 /api/workshop/*；生成模型必须是强模型，跟「AI 大脑」完全分开。 */
+function Workshop() {
+  const [status, setStatus] = useState(null);
+  const [errors, setErrors] = useState([]);
+  const [account, setAccount] = useState({ email: '', logged_in: false });
+  const [subs, setSubs] = useState([]);
+  const [need, setNeed] = useState('');
+  const [busy, setBusy] = useState('');
+  const [msg, setMsg] = useState('');
+  const [plan, setPlan] = useState(null);
+  const [result, setResult] = useState(null);
+  const [built, setBuilt] = useState(null);
+  const [cfg, setCfg] = useState({ provider: 'deepseek', api_key: '', model: '', api_url: '' });
+  const [login, setLogin] = useState({ email: '', password: '' });
+  const fileRef = useRef(null);
+
+  const load = useCallback(async () => {
+    try {
+      const st = await get('/api/workshop/status');
+      setStatus(st);
+      setCfg((c) => ({ ...c, provider: st.provider || c.provider, model: st.model || c.model }));
+    } catch (e) {
+      setMsg(e.message);
+    }
+    try { setErrors((await get('/api/workshop/errors')).errors || []); } catch (e) { /* 忽略 */ }
+    try { setAccount(await get('/api/workshop/account')); } catch (e) { /* 忽略 */ }
+    try { setSubs((await get('/api/workshop/submissions')).submissions || []); } catch (e) { /* 忽略 */ }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const run = async (tag, fn) => {
+    setBusy(tag);
+    setMsg('');
+    try {
+      return await fn();
+    } catch (e) {
+      setMsg(e.message);
+      return null;
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const saveCfg = () => run('cfg', async () => {
+    const st = await put('/api/workshop/config', cfg);
+    setStatus(st);
+    setCfg((c) => ({ ...c, api_key: '' }));
+    setMsg('生成模型存好了：' + (st.provider_name || '') + ' · ' + (st.model || ''));
+  });
+
+  const doBuild = () => run('build', async () => {
+    if (!need.trim()) { setMsg('先说说你想要什么功能。'); return; }
+    const out = await post('/api/workshop/build', { need: need.trim() });
+    setPlan(out.plan || null);
+    setResult(out);
+    setBuilt(out.ok ? out : null);
+    setMsg(out.ok ? '写好了，检查 + 沙箱试跑全过，点「安装到机器人」。'
+      : '这次没过检查，看下面的问题，改改需求描述再试。');
+    await load();
+  });
+
+  const doInstall = () => run('install', async () => {
+    if (!built || !built.build_id) return;
+    const out = await post('/api/workshop/install', { build_id: built.build_id });
+    setBuilt(null);
+    setMsg('装好了：' + out.id + '。重启一下机器人就生效。');
+    await load();
+  });
+
+  const doRepair = (pid) => run('repair:' + pid, async () => {
+    const out = await post('/api/workshop/repair', { id: pid });
+    setPlan(out.plan || null);
+    setResult(out);
+    setBuilt(out.ok ? out : null);
+    setMsg(out.ok ? '按真实报错改好了一版，点「安装到机器人」换上（旧版本留着，可换回来）。'
+      : '改完还是没过检查。');
+    await load();
+  });
+
+  const doExport = (pid) => run('export:' + pid, async () => {
+    const out = await post('/api/workshop/export', { id: pid });
+    setMsg('导出好了：' + out.path + '（' + out.files + ' 个文件）');
+  });
+
+  const doUpload = (pid) => run('upload:' + pid, async () => {
+    const out = await post('/api/workshop/upload', { id: pid, note: '' });
+    setMsg('已交给站长审核（编号 #' + out.id + '）。通过后会进插件市场。');
+    await load();
+  });
+
+  const doImport = () => run('import', async () => {
+    const file = fileRef.current && fileRef.current.files && fileRef.current.files[0];
+    if (!file) { setMsg('先选一个插件 zip。'); return; }
+    const b64 = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result).split(',', 2)[1] || '');
+      reader.onerror = () => reject(new Error('读文件失败'));
+      reader.readAsDataURL(file);
+    });
+    const out = await post('/api/workshop/import', { zip_b64: b64, filename: file.name });
+    setMsg('插件包装好了：' + (out.name || out.id) + '。重启机器人后生效。');
+    if (fileRef.current) fileRef.current.value = '';
+    await load();
+  });
+
+  const doLogin = () => run('login', async () => {
+    if (!login.email || !login.password) { setMsg('邮箱和密码都要填。'); return; }
+    await post('/api/workshop/account', login);
+    setLogin({ email: '', password: '' });
+    setMsg('星群账号登录成功，现在可以上传插件了。');
+    await load();
+  });
+
+  const errOf = (pid) => errors.find((e) => e.id === pid);
+  const installed = (status && status.installed) || [];
+
+  return (
+    <>
+      <div className="page-head">
+        <h1>插件工坊</h1>
+        <p>
+          用大白话给机器人加功能：AI 写插件 → 自动检查 → 沙箱试跑 → 一键安装。
+          生成用的模型必须是有编码能力的强模型，跟「AI 大脑」分开配。
+        </p>
+      </div>
+
+      {msg && <p className="card__note" style={{ marginBottom: 12 }}>{msg}</p>}
+
+      <Group title="生成模型" desc={status ? (status.why || '') : '读取中…'}>
+        <div className="field">
+          <label>服务商</label>
+          <select
+            className="p-select"
+            value={cfg.provider}
+            onChange={(e) => {
+              const p = (status?.providers || []).find((x) => x.key === e.target.value);
+              setCfg((c) => ({ ...c, provider: e.target.value, model: p ? p.model : c.model, api_url: p ? p.url : c.api_url }));
+            }}
+          >
+            {((status && status.providers) || [{ key: 'deepseek', name: 'DeepSeek' }]).map((p) => (
+              <option key={p.key} value={p.key}>{p.name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label>模型名</label>
+          <input value={cfg.model} onChange={(e) => setCfg((c) => ({ ...c, model: e.target.value }))} />
+        </div>
+        <div className="field">
+          <label>API Key{status && status.api_key_masked ? `（已存 ${status.api_key_masked}，要改就重填）` : ''}</label>
+          <input
+            type="password"
+            value={cfg.api_key}
+            placeholder="填了才会覆盖已存的"
+            onChange={(e) => setCfg((c) => ({ ...c, api_key: e.target.value }))}
+          />
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8, alignItems: 'center' }}>
+          <button type="button" className="btn btn--primary" disabled={Boolean(busy)} onClick={saveCfg}>保存</button>
+          <span className="card__note">{status ? status.hint : ''}</span>
+        </div>
+      </Group>
+
+      <Group title="说需求，AI 写插件" desc="一句话就行，写得越具体越好用。">
+        <textarea
+          value={need}
+          rows={3}
+          placeholder="例如：群里谁签到就记一次，能查每个人有多少金币"
+          onChange={(e) => setNeed(e.target.value)}
+        />
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8, alignItems: 'center' }}>
+          <button type="button" className="btn btn--primary" disabled={Boolean(busy)} onClick={doBuild}>
+            {busy === 'build' ? '正在写…' : '生成插件（自动检查 + 试跑）'}
+          </button>
+          <button type="button" className="btn" disabled={!built || Boolean(busy)} onClick={doInstall}>安装到机器人</button>
+        </div>
+        {plan && (
+          <p className="card__note">
+            方案：{plan.what || plan.name} · 工具 {(plan.tools || []).map((t) => t.name).join('、') || '—'}
+            {result && result.issues && result.issues.length ? ` · 问题 ${result.issues.length} 条` : ''}
+          </p>
+        )}
+        {result && !result.ok && (
+          <ul className="card__note">
+            {(result.issues || []).filter((i) => i.level === 'error').slice(0, 5).map((i, ix) => (
+              <li key={ix}>{i.plain}</li>
+            ))}
+          </ul>
+        )}
+      </Group>
+
+      <Group title="已装的插件" desc="AI 生成的插件跑挂了会自动记下来，可以按报错修一版。">
+        {installed.length === 0 && <p className="card__note">还没有装任何插件。</p>}
+        {installed.map((p) => {
+          const err = errOf(p.id);
+          return (
+            <div key={p.id} className="row-item" style={{ marginBottom: 6 }}>
+              <span style={{ flex: 1 }}>
+                {p.name}（{p.id}）· 工具 {(p.tools || []).join('、') || '—'}
+                {err ? <b style={{ color: '#e8c07a' }}> · 跑出过 {err.count} 次错</b> : null}
+              </span>
+              <button type="button" className="btn btn--sm" disabled={Boolean(busy)} onClick={() => doExport(p.id)}>导出 zip</button>
+              <button type="button" className="btn btn--sm" disabled={Boolean(busy)} onClick={() => doUpload(p.id)}>上传审核</button>
+              <button type="button" className="btn btn--primary btn--sm" disabled={!err || Boolean(busy)} onClick={() => doRepair(p.id)}>让 AI 修一版</button>
+            </div>
+          );
+        })}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8, alignItems: 'center' }}>
+          <input type="file" accept=".zip" ref={fileRef} style={{ maxWidth: 240 }} />
+          <button type="button" className="btn" disabled={Boolean(busy)} onClick={doImport}>导入插件包</button>
+        </div>
+      </Group>
+
+      <Group title="投稿与账号" desc="上传插件要用星群账号；站长在官网审核台点通过才会进插件市场。">
+        <p className="card__note">
+          {account.logged_in ? `已登录：${account.email}` : '还没登录星群账号（只用来看审核状态、上传插件）。'}
+        </p>
+        {!account.logged_in && (
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <input placeholder="星群账号邮箱" value={login.email} onChange={(e) => setLogin((s) => ({ ...s, email: e.target.value }))} />
+            <input type="password" placeholder="密码" value={login.password} onChange={(e) => setLogin((s) => ({ ...s, password: e.target.value }))} />
+            <button type="button" className="btn btn--primary" disabled={Boolean(busy)} onClick={doLogin}>登录</button>
+          </div>
+        )}
+        {subs.length > 0 && (
+          <ul className="card__note">
+            {subs.map((s) => <li key={s.id}>{s.text}</li>)}
+          </ul>
+        )}
+      </Group>
+    </>
   );
 }
 
@@ -604,6 +850,7 @@ export default function App() {
                 onBack={() => setView('plugins')}
               />
             )}
+            {view === 'workshop' && <Workshop />}
             {view === 'logs' && <Logs loggedIn={Boolean(token)} />}
             {view === 'settings' && (
               <Settings

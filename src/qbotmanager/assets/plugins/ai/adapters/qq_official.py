@@ -83,12 +83,14 @@ async def build_channel_from_qq_official(chat_handler, bot, event):
         extra={"group_openid": str(getattr(event, "group_openid", "") or "")},
     )
 
-    async def send_text(t: str) -> None:
+    async def send_text(t: str) -> bool:
         await bot.send(event, t)
+        return True
 
-    async def send_text_at(t: str) -> None:
+    async def send_text_at(t: str) -> bool:
         # 官方接口按 msg_id 被动回复即可，不需要手动拼接 @
         await bot.send(event, t)
+        return True
 
     async def notify_error(err: str) -> None:
         logger.error(f"[qq_official] {err}")

@@ -948,7 +948,7 @@ def test_nav_groups_match_console():
     assert [t for t, _items in MainWindow.NAV_GROUPS] == ["运行", "能力", "系统"]
     assert [n for _t, items in MainWindow.NAV_GROUPS for n in items] == list(MainWindow.PAGE_ORDER)
     # 组内顺序与控制台一致：能力组是「AI 大脑 / 插件」，系统组第一项是「全局管理」
-    assert MainWindow.NAV_GROUPS[1][1] == ("AI 大脑", "插件")
+    assert MainWindow.NAV_GROUPS[1][1] == ("AI 大脑", "插件", "插件工坊")
     assert MainWindow.NAV_GROUPS[2][1][0] == "全局管理"
 
     # 页面下标必须与 PAGE_ORDER 一一对应（加页面时最容易被写歪的地方）
@@ -1103,6 +1103,35 @@ def test_message_center_shows_scene_and_room():
     print("OK ui message_center")
 
 
+def test_workshop_page_basics():
+    """插件工坊页：未配模型时给大白话提示，按钮状态正确，小白模式收起进阶面板。"""
+    from PySide6.QtWidgets import QApplication
+
+    from qbotmanager.core.settings import Settings
+    from qbotmanager.tasks.task_manager import TaskManager
+    from qbotmanager.ui.main_window import MainWindow
+
+    app = QApplication.instance() or QApplication([])
+    tmp = Path(tempfile.mkdtemp(prefix="qbm_ws_page_"))
+    s = Settings(tmp)
+    s.ensure_dirs()
+    s.bg_video_enabled = False
+    s.bg_image_enabled = False
+    s.save()
+    win = MainWindow(s, TaskManager())
+    app.processEvents()
+    wp = win.pages[win._page_index["插件工坊"]]
+    assert "强模型" in wp.status_label.text(), wp.status_label.text()
+    assert wp.btn_build.isEnabled() is False
+    assert wp.btn_install.isEnabled() is False
+    assert wp.need_edit.isEnabled() is True
+    # 小白模式下"已装/回滚"面板收起，但工坊入口保留（它就是给小白用的）
+    assert win.nav_row_hidden("插件工坊") is False
+    assert wp.installed_panel.isHidden()
+    win.deleteLater()
+    print("OK ui workshop_page")
+
+
 if __name__ == "__main__":
     test_qss()
     test_theme_switch_keeps_page()
@@ -1133,3 +1162,4 @@ if __name__ == "__main__":
     test_services_page_controls()
     test_logs_export_writes_file()
     test_message_center_shows_scene_and_room()
+    test_workshop_page_basics()

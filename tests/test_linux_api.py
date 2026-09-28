@@ -623,3 +623,51 @@ def test_static_endpoints_do_not_leak_paths_without_login(tmp_path, monkeypatch)
         assert client.get(path).status_code == 401, path
     assert client.get("/health").status_code == 200
     assert client.get("/api/status").json().get("data_home") is None
+
+
+def _workshop_settings(tmp_path, monkeypatch):
+    """把无头端的部署设置指到临时目录（工坊配置就落在 tmp/workshop）。"""
+    from qbotmanager.core.settings import Settings
+
+    s = Settings(tmp_path)
+    monkeypatch.setattr(api.deploy, "build_settings", lambda: s)
+    return s
+
+
+def test_workshop_api_roundtrip(tmp_path, monkeypatch):
+    """工坊后台接口：不登录拒绝 / 弱模型拒绝 / 强模型存得下 / 假 build_id 装不了。"""
+    _workshop_settings(tmp_path, monkeypatch)
+    assert client.get("/api/workshop/status").status_code == 401
+    headers = _auth(monkeypatch, tmp_path)
+
+    res = client.get("/api/workshop/status", headers=headers)
+    assert res.status_code == 200
+    data = res.json()
+    assert data["ok"] is True and data["ready"] is False
+    assert "DeepSeek" in data["hint"]
+
+    # 自建/弱模型：工坊直接 400（不然生成出来的插件不能用）
+    res = client.put("/api/workshop/config", headers=headers,
+                     json={"provider": "custom", "api_key": "sk-x", "model": "gpt-3"})
+    assert res.status_code == 400
+    assert "DeepSeek" in res.json()["detail"]
+
+    res = client.put("/api/workshop/config", headers=headers,
+                     json={"provider": "deepseek", "api_key": "sk-test-key-1234",
+                           "model": "deepseek-chat"})
+    assert res.status_code == 200
+    data = res.json()
+    assert data["ready"] is True and data["model"] == "deepseek-chat"
+    assert "sk-test-key-1234" not in json.dumps(data)      # 密钥只回掩码
+
+    # 前端把掩码回填回来时，不能把真 key 覆盖掉
+    res = client.put("/api/workshop/config", headers=headers,
+                     json={"provider": "deepseek", "api_key": data["api_key_masked"],
+                           "model": "deepseek-chat"})
+    assert res.json()["ready"] is True
+
+    # 没生成过就装：404 —— 不认客户端自己塞的文件
+    res = client.post("/api/workshop/install", headers=headers,
+                      json={"build_id": "nope"})
+    assert res.status_code == 404
+    assert client.get("/api/workshop/history", headers=headers).json()["history"] == []

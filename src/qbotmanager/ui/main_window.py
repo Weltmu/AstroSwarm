@@ -40,6 +40,7 @@ from .pages.services_page import ServicesPage
 from .pages.settings_page import SettingsPage
 from .pages.telegram_page import TelegramPage
 from .pages.wechat_page import WechatPage
+from .pages.workshop_page import WorkshopPage
 from .theme import build_qss
 from .video_background import VideoBackground
 
@@ -56,6 +57,7 @@ NAV_ICONS = {
     "纸飞机": "paper-plane",
     "AI 大脑": "brain",
     "插件": "puzzle-piece",
+    "插件工坊": "magic-wand",
     "全局管理": "robot",
     "消息中心": "chat-centered",
     "日志": "terminal-window",
@@ -164,7 +166,7 @@ class MainWindow(QWidget):
     # 桌面端保留独立页面，统一挂在「运行」组，顺序与以前一致（少一次记忆迁移）。
     NAV_GROUPS = (
         ("运行", ("首页", "接入", "微信", "QQ", "飞书", "纸飞机")),
-        ("能力", ("AI 大脑", "插件")),
+        ("能力", ("AI 大脑", "插件", "插件工坊")),
         ("系统", ("全局管理", "消息中心", "日志", "依赖", "设置")),
     )
     # 页面索引顺序：与控制台一致，新增页插在它该在的位置（不再往后追加）
@@ -505,6 +507,7 @@ class MainWindow(QWidget):
             TelegramPage(ctx),             # 纸飞机
             BrainPage(ctx),                # AI 大脑
             PluginsPage(ctx),              # 插件
+            WorkshopPage(ctx),             # 插件工坊（AI 用大白话生成插件）
             ServicesPage(ctx),             # 全局管理（服务启停 + 运维细节）
             MessageCenterPage(ctx),        # 消息中心
             LogsPage(ctx, self.log_bus),   # 日志

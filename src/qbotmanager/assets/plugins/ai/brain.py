@@ -297,7 +297,8 @@ async def handle_message(msg: ChannelMessage, ctx: ChannelContext) -> None:
             ai_messages = [
                 {"role": "system", "content": "以下是长期记忆（如与当前对话无关可忽略）：\n" + mem_text}
             ] + ctx_messages
-        reply = await get_chat_reply_with_tools(ai_messages, is_group)
+        reply = await get_chat_reply_with_tools(
+            ai_messages, is_group, msg=msg, channel=ctx)
         logger.info(f"[brain] AI 回复 {len(reply)} 字")
         add_message(key, "assistant", reply)
         if is_group:

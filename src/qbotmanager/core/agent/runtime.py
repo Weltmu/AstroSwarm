@@ -77,8 +77,18 @@ class AgentRuntime:
                     continue
         return total
 
-    def schemas(self) -> list:
-        return self.registry.schemas()
+    def schemas(self, platform: str = "") -> list:
+        """按通道裁剪的工具清单（platform 为空 = 全部，旧行为）。"""
+        return self.registry.schemas(platform)
+
+    def packs(self) -> dict:
+        return self.registry.packs()
+
+    def pack_meta(self, pack_id: str):
+        return self.registry.pack_meta(pack_id)
+
+    def tool_names(self) -> set:
+        return self.registry.names()
 
     def behavior(self, behavior_id: str) -> dict | None:
         return self.registry.behavior(behavior_id)
@@ -88,6 +98,37 @@ class AgentRuntime:
 
     def execute(self, name: str, args: dict, ctx: ToolContext) -> str:
         return self.registry.execute(name, args, ctx)
+
+    async def execute_async(self, name: str, args: dict, ctx: ToolContext,
+                            host=None, timeout=None) -> str:
+        """异步执行入口：沙箱工具走独立子进程，其余与 execute 完全一致。
+
+        host 是主程序提供的动作执行器 ``async def host(action, params, ctx)``，
+        沙箱里的插件只能通过它做事（发消息/记忆/联网等），主程序逐条校验。
+        """
+        spec = self.registry.check(name, ctx)
+        if not spec.sandbox:
+            return self.execute(name, args, ctx)
+        from . import sandbox
+
+        meta = self.registry.pack_meta(spec.pack_id) or {}
+        pack_dir = meta.get("dir") or ""
+        if not pack_dir:
+            raise sandbox.SandboxError(
+                f"沙箱工具 {name} 找不到所属插件目录（包 {spec.pack_id}）")
+        try:
+            return await sandbox.run_tool(
+                Path(pack_dir), spec.name, args or {}, ctx, host, timeout=timeout)
+        except Exception as exc:  # noqa: BLE001
+            # 工坊生成的插件在真实使用中挂了：记一条，工坊页能让 AI 按这条报错改一版。
+            # 记不下来也不能影响机器人本体，所以整段吞掉异常。
+            try:
+                from ..workshop import repair as _repair
+
+                _repair.record_for_pack(Path(pack_dir), spec.name, str(exc))
+            except Exception:  # noqa: BLE001
+                pass
+            raise
 
 
 def get_runtime() -> AgentRuntime:

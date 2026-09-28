@@ -13,9 +13,82 @@ ALLOWED_PERMISSIONS = {
 ALLOWED_KINDS = {"tool-pack", "persona-pack", "behavior-pack", "agent-pack"}
 PERSONA_CARD_FORMAT = "astroswarm-persona"
 
+# 运行时平台名 → manifest.adapters 里的通道名（工具包声明兼容哪些通道）
+PLATFORM_ADAPTERS = {
+    "qq": "qq",
+    "qq_official": "qq_official",
+    "wechat": "wechat_ilink",
+    "feishu": "feishu",
+    "telegram": "telegram",
+}
+
+
+def platform_adapter(platform: str) -> str:
+    """把运行时平台名（qq_official / wechat …）换成 manifest 里的通道名。"""
+    return PLATFORM_ADAPTERS.get(str(platform or "").strip(), "")
+
+
+def adapters_allow(adapters, platform: str) -> bool:
+    """通道过滤：adapters 为空 = 不限通道；有声明就必须命中当前通道。
+
+    拿不到平台信息（platform 为空，例如旧调用方/单元测试）时不拦截，
+    保证 2026-09-27 之前的调用行为完全不变。
+    """
+    items = [str(a).strip() for a in (adapters or []) if str(a).strip()]
+    if not items:
+        return True
+    current = platform_adapter(platform)
+    if not current:
+        return True
+    return current in items
+
 
 class ToolPermissionError(PermissionError):
     """工具缺少权限时抛出。"""
+
+
+class ToolUnavailableError(RuntimeError):
+    """工具在当前环境/通道不可用（通道不匹配、需要沙箱异步执行等）。"""
+
+
+# 会真的改变外部世界的动作：这些失败了才算"没做成"（读类动作失败是正常流程）
+EFFECT_ACTIONS = {
+    "send_message", "mute_user", "mute_all", "recall_message",
+    "http_request", "memory_write", "data_write", "reminder_add",
+}
+
+
+def merge_effect_report(result_text: str, effect_results) -> str:
+    """动作回执校验：工具说成功、但主程序执行动作失败时，把真相写回结果。
+
+    追加 ``effect_errors`` 并把 ok 改成 false，模型据此如实告知用户，
+    而不是照抄工具返回的"成功"。
+    """
+    bad = []
+    for item in effect_results or ():
+        if not isinstance(item, dict) or item.get("ok") is not False:
+            continue
+        if str(item.get("action") or "") not in EFFECT_ACTIONS:
+            continue    # 读/探测类动作失败不算"没做成"（插件往往会自己兜底）
+        bad.append({
+            "action": str(item.get("action") or ""),
+            "error": str(item.get("error") or item.get("detail") or "failed"),
+        })
+    if not bad:
+        return result_text
+    text = str(result_text)
+    try:
+        data = json.loads(text)
+    except Exception:  # noqa: BLE001
+        data = None
+    if not isinstance(data, dict):
+        return text + "\n[动作回执] " + json.dumps(
+            {"effect_errors": bad}, ensure_ascii=False)
+    if data.get("ok") is False:
+        return text
+    data["ok"] = False
+    data["effect_errors"] = bad
+    return json.dumps(data, ensure_ascii=False, default=str)
 
 
 @dataclass
@@ -27,6 +100,8 @@ class ToolSpec:
     handler: callable
     lifecycle: str = "none"
     pack_id: str = ""
+    adapters: list = field(default_factory=list)
+    sandbox: bool = False
 
     def schema(self) -> dict:
         return {
@@ -40,21 +115,69 @@ class ToolSpec:
 
 
 class ToolContext:
-    """工具执行上下文：配置/存储/发送回执/权限集合。"""
+    """工具执行上下文：配置/存储/发送回执/权限集合 + 当前通道信息。
 
-    def __init__(self, cfg=None, store=None, send=None, permissions=frozenset()):
+    2026-09-27 起补充平台/用户字段与"动作回执"：工具里的
+    ``ctx.send(action, params)`` 交给主程序执行（发消息、写记忆等），
+    结果记进 ``effect_results``，registry 会拿它判断
+    "工具说成功、但动作其实没做成"的情况。
+    旧调用方只传 cfg/store/send/permissions 时行为与以前完全一致。
+    """
+
+    def __init__(self, cfg=None, store=None, send=None, permissions=frozenset(),
+                 platform="", scene="", user_id="", group_id="", nickname="",
+                 is_superuser=False, extra=None, flush=None, channel=None):
         self.cfg = cfg
         self.store = store
         self._send = send
         self._permissions = set(permissions or ())
+        self.platform = str(platform or "")
+        self.scene = str(scene or "")
+        self.user_id = str(user_id or "")
+        self.group_id = str(group_id or "")
+        self.nickname = str(nickname or "")
+        self.is_superuser = bool(is_superuser)
+        self.extra = dict(extra or {})
+        self.flush = flush
+        self.channel = channel   # 主程序侧的通道发送器（ChannelContext），不下发沙箱
+        self.effect_results: list = []
+
+    @property
+    def source(self) -> str:
+        """<通道>:<场景>，如 qq_official:group / qq:c2c / wechat:private。"""
+        if not self.platform:
+            return ""
+        if self.platform == "qq":
+            return "qq:group" if self.scene == "group" else "qq:c2c"
+        return f"{self.platform}:{self.scene or 'private'}"
 
     def can(self, permission: str) -> bool:
         return permission in self._permissions
 
-    def send(self, *args, **kwargs):
+    def bind_send(self, fn) -> None:
+        """换一个动作执行器（主程序每次执行工具前调用；None = 关掉动作）。"""
+        self._send = fn
+
+    def send(self, action, params=None):
+        """请求主程序执行一个动作；返回 {"ok": bool, ...}，并记录回执。"""
         if self._send is None:
-            return None
-        return self._send(*args, **kwargs)
+            res = {"ok": False, "error": "action_unavailable",
+                   "action": str(action)}
+        else:
+            try:
+                res = self._send(str(action), dict(params or {}))
+            except Exception as e:  # noqa: BLE001 —— 动作失败不能让工具崩掉
+                res = {"ok": False, "error": "action_error",
+                       "action": str(action), "detail": str(e)}
+        if not isinstance(res, dict):
+            res = {"ok": True, "action": str(action), "value": res}
+        else:
+            # 回执必须带动作名：执行器漏填时由上下文补上，
+            # 否则"动作失败了"会被 merge_effect_report 当成读类动作放过。
+            res = dict(res)
+            res.setdefault("action", str(action))
+        self.effect_results.append(res)
+        return res
 
 
 @dataclass
@@ -81,6 +204,7 @@ class ToolPackManifest:
     state: dict = field(default_factory=dict)
     behavior: dict = field(default_factory=dict)
     bundled_packs: list = field(default_factory=list)
+    sandbox: bool = False
 
     @staticmethod
     def _norm_str_list(value) -> list:
@@ -130,6 +254,7 @@ class ToolPackManifest:
             state=dict(data.get("state") or {}),
             behavior=dict(data.get("behavior") or {}),
             bundled_packs=list(data.get("bundled_packs") or []),
+            sandbox=bool(data.get("sandbox") or False),
         )
 
 

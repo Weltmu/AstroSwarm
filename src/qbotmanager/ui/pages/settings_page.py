@@ -372,8 +372,9 @@ class SettingsPage(QWidget):
         # ---- 版本与更新 ----
         ver, vl = self._card(
             "版本与更新",
-            "客户端与全部插件源码在 GitHub 开源（Apache-2.0）：QQ 通道与能力包免费，"
-            "微信通道为官方付费开通，也可以自己用仓库里的适配器接入（不含官方支持）。")
+            "客户端与全部插件源码在 GitHub 开源（Apache-2.0）：QQ 通道与全部能力包直接可用；"
+            "微信通道走腾讯官方 iLink，需在账号中心开通后扫码登录，"
+            "也可以自己用仓库里的适配器接入（不含官方支持）。")
         lay.addWidget(ver)
         self._add_info_rows(vl, ("app_version", "latest_version", "update_time"))
         upd_row = QHBoxLayout()

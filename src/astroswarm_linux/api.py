@@ -1,8 +1,12 @@
 """AstroSwarm headless 控制 API + React 控制台托管。"""
+import base64
 import json
 import logging
 import os
+import re
 import secrets
+import shutil
+import tempfile
 import time
 import urllib.request
 from pathlib import Path
@@ -16,6 +20,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from qbotmanager.core import ai_config
 from qbotmanager.core import tool_packs as tool_packs_mod
+from qbotmanager.core import workshop
 
 from . import (
     __version__,
@@ -332,6 +337,336 @@ def tools_uninstall(
     return tools.uninstall(body.id)
 
 
+# ---- AI 插件工坊（生成模型独立于「AI 大脑」；生成的插件只跑沙箱）----
+
+
+class WorkshopConfigBody(BaseModel):
+    provider: str = ""
+    api_key: str = ""
+    api_url: str = ""
+    model: str = ""
+
+
+class WorkshopBuildBody(BaseModel):
+    need: str = ""
+    channels: list[str] = []
+
+
+class WorkshopBuildRef(BaseModel):
+    build_id: str = ""
+
+
+class WorkshopPackBody(BaseModel):
+    id: str = ""
+
+
+# 生成结果只在内存里放一会儿：装的是"刚校验过的这一份"，
+# 不让客户端把任意文件塞回来当插件装；最多留 5 份。
+_workshop_builds: dict = {}
+_MAX_BUILDS = 5
+
+
+@app.get("/api/workshop/status")
+def workshop_status(authorization: str = FastAPIHeader("", alias="Authorization")):
+    """工坊状态：能不能生成 / 用哪家模型 / 已装清单 / 当前通道。"""
+    _require_auth(authorization)
+    s = deploy.build_settings()
+    out = {
+        "ok": True,
+        "channels": workshop.active_channels(s),
+        "installed": workshop.generated(s),
+    }
+    out.update(workshop.status(s))
+    return out
+
+
+@app.put("/api/workshop/config")
+def workshop_config_put(
+    body: WorkshopConfigBody,
+    authorization: str = FastAPIHeader("", alias="Authorization"),
+):
+    """保存工坊生成模型；非强模型（DeepSeek/ChatGPT/Claude/GLM/通义/Kimi）直接 400。"""
+    _require_auth(authorization)
+    s = deploy.build_settings()
+    data = body.model_dump()
+    key = str(data.get("api_key") or "")
+    # 前端回填的是掩码（****1234），别把掩码当新 key 存进去
+    if key.startswith("****") or not key.strip():
+        data["api_key"] = str(workshop.config.load(s).get("api_key") or "")
+    try:
+        workshop.config.save(s, data)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    out = {"ok": True}
+    out.update(workshop.status(s))
+    return out
+
+
+@app.post("/api/workshop/build")
+def workshop_build(
+    body: WorkshopBuildBody,
+    authorization: str = FastAPIHeader("", alias="Authorization"),
+):
+    """说需求 → 方案 → 生成 → 自动检查 → 自动重写 → 沙箱试跑（这一步还不装）。"""
+    _require_auth(authorization)
+    need = (body.need or "").strip()
+    if not need:
+        raise HTTPException(400, "先说说你想要什么功能")
+    s = deploy.build_settings()
+    channels = [str(c) for c in (body.channels or [])] or workshop.active_channels(s)
+    try:
+        built = workshop.build(s, need, channels=channels or None)
+    except workshop.generator.WorkshopError as exc:
+        raise HTTPException(400, exc.plain or str(exc))
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(500, str(exc))
+    token = secrets.token_urlsafe(9)
+    _workshop_builds[token] = built
+    while len(_workshop_builds) > _MAX_BUILDS:
+        _workshop_builds.pop(next(iter(_workshop_builds)))
+    out = {k: v for k, v in built.items() if k != "files"}
+    out["build_id"] = token
+    out["files"] = sorted((built.get("files") or {}).keys())
+    return out
+
+
+@app.post("/api/workshop/install")
+def workshop_install(
+    body: WorkshopBuildRef,
+    authorization: str = FastAPIHeader("", alias="Authorization"),
+):
+    _require_auth(authorization)
+    built = _workshop_builds.get(str(body.build_id or ""))
+    if built is None:
+        raise HTTPException(404, "这次生成的结果已经过期，请重新生成一次")
+    s = deploy.build_settings()
+    try:
+        result = workshop.install(s, built)
+    except workshop.installer.InstallError as exc:
+        raise HTTPException(400, str(exc))
+    result["needs_restart"] = True
+    return result
+
+
+@app.get("/api/workshop/history")
+def workshop_history(
+    pack_id: str = "",
+    authorization: str = FastAPIHeader("", alias="Authorization"),
+):
+    _require_auth(authorization)
+    s = deploy.build_settings()
+    items = workshop.history(s, pack_id) if pack_id else []
+    return {"ok": True, "id": pack_id, "history": items}
+
+
+@app.post("/api/workshop/rollback")
+def workshop_rollback(
+    body: WorkshopPackBody,
+    authorization: str = FastAPIHeader("", alias="Authorization"),
+):
+    _require_auth(authorization)
+    s = deploy.build_settings()
+    try:
+        result = workshop.rollback(s, str(body.id or ""))
+    except workshop.installer.InstallError as exc:
+        raise HTTPException(400, str(exc))
+    result["needs_restart"] = True
+    return result
+
+
+@app.post("/api/workshop/uninstall")
+def workshop_uninstall(
+    body: WorkshopPackBody,
+    authorization: str = FastAPIHeader("", alias="Authorization"),
+):
+    _require_auth(authorization)
+    s = deploy.build_settings()
+    try:
+        result = workshop.uninstall(s, str(body.id or ""))
+    except workshop.installer.InstallError as exc:
+        raise HTTPException(400, str(exc))
+    result["needs_restart"] = True
+    return result
+
+
+# ---------------- 工坊：分享 / 投稿 / 运行期自修复（2026-09-28） ----------------
+
+
+class WorkshopNoteBody(BaseModel):
+    id: str = ""
+    note: str = ""
+
+
+class WorkshopImportBody(BaseModel):
+    zip_b64: str = ""
+    filename: str = "plugin.zip"
+
+
+class WorkshopAccountBody(BaseModel):
+    email: str = ""
+    password: str = ""
+
+
+class WorkshopSubmissionBody(BaseModel):
+    id: int = 0
+
+
+@app.get("/api/workshop/errors")
+def workshop_errors(authorization: str = FastAPIHeader("", alias="Authorization")):
+    """跑挂过的工坊插件（按插件汇总），界面拿它显示「让 AI 修一版」。"""
+    _require_auth(authorization)
+    s = deploy.build_settings()
+    return {"ok": True, "errors": workshop.runtime_errors(s)}
+
+
+@app.post("/api/workshop/repair")
+def workshop_repair(
+    body: WorkshopPackBody,
+    authorization: str = FastAPIHeader("", alias="Authorization"),
+):
+    """按真实报错让 AI 改一版；结果同样只能走 /api/workshop/install 安装。"""
+    _require_auth(authorization)
+    s = deploy.build_settings()
+    try:
+        built = workshop.fix_from_errors(s, str(body.id or ""))
+    except workshop.repair.RepairError as exc:
+        raise HTTPException(400, str(exc))
+    except workshop.generator.WorkshopError as exc:
+        raise HTTPException(400, exc.plain or str(exc))
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(500, str(exc))
+    token = secrets.token_urlsafe(9)
+    _workshop_builds[token] = built
+    while len(_workshop_builds) > _MAX_BUILDS:
+        _workshop_builds.pop(next(iter(_workshop_builds)))
+    out = {k: v for k, v in built.items() if k != "files"}
+    out["build_id"] = token
+    out["files"] = sorted((built.get("files") or {}).keys())
+    return out
+
+
+@app.post("/api/workshop/export")
+def workshop_export(
+    body: WorkshopPackBody,
+    authorization: str = FastAPIHeader("", alias="Authorization"),
+):
+    """把装好的插件打包成 zip（发人 / 传官网都用这一份）。"""
+    _require_auth(authorization)
+    s = deploy.build_settings()
+    try:
+        return workshop.export_zip(s, str(body.id or ""))
+    except workshop.publisher.PublishError as exc:
+        raise HTTPException(400, str(exc))
+
+
+@app.post("/api/workshop/import")
+def workshop_import(
+    body: WorkshopImportBody,
+    authorization: str = FastAPIHeader("", alias="Authorization"),
+):
+    """导入别人给的插件包：静态检查 + 沙箱试跑全过才装。"""
+    _require_auth(authorization)
+    s = deploy.build_settings()
+    raw = str(body.zip_b64 or "").strip()
+    if "," in raw[:64] and raw.lstrip().startswith("data:"):
+        raw = raw.split(",", 1)[1]
+    if not raw:
+        raise HTTPException(400, "没有收到插件包")
+    try:
+        data = base64.b64decode(raw)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(400, "插件包不是合法的 base64 数据") from exc
+    name = re.sub(r"[^A-Za-z0-9._-]", "_", str(body.filename or "plugin.zip"))[:60]
+    if not name.lower().endswith(".zip"):
+        name += ".zip"
+    tmp_dir = Path(tempfile.mkdtemp(prefix="ws_import_"))
+    try:
+        path = tmp_dir / name
+        path.write_bytes(data)
+        result = workshop.import_zip(s, path)
+    except workshop.publisher.PublishError as exc:
+        raise HTTPException(400, str(exc))
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+    result["needs_restart"] = True
+    return result
+
+
+@app.post("/api/workshop/upload")
+def workshop_upload(
+    body: WorkshopNoteBody,
+    authorization: str = FastAPIHeader("", alias="Authorization"),
+):
+    """上传到官网等站长审核（要用星群账号登录）。"""
+    _require_auth(authorization)
+    s = deploy.build_settings()
+    try:
+        return workshop.upload(s, str(body.id or ""), note=str(body.note or ""))
+    except workshop.publisher.PublishError as exc:
+        raise HTTPException(400, str(exc))
+
+
+@app.get("/api/workshop/submissions")
+def workshop_submissions(authorization: str = FastAPIHeader("", alias="Authorization")):
+    """我上传过的插件（含审核状态与驳回原因）。"""
+    _require_auth(authorization)
+    try:
+        data = workshop.submissions()
+    except workshop.publisher.PublishError as exc:
+        raise HTTPException(400, str(exc))
+    return {"ok": True,
+            "submissions": workshop.publisher.describe(data.get("submissions") or [])}
+
+
+@app.post("/api/workshop/submissions/withdraw")
+def workshop_submissions_withdraw(
+    body: WorkshopSubmissionBody,
+    authorization: str = FastAPIHeader("", alias="Authorization"),
+):
+    """撤回自己还没审的投稿。"""
+    _require_auth(authorization)
+    try:
+        return workshop.withdraw_submission(int(body.id or 0))
+    except workshop.publisher.PublishError as exc:
+        raise HTTPException(400, str(exc))
+
+
+@app.get("/api/workshop/account")
+def workshop_account(authorization: str = FastAPIHeader("", alias="Authorization")):
+    """当前登录的星群账号（上传插件要用它）。"""
+    _require_auth(authorization)
+    from qbotmanager.core import account as _account
+
+    data = _account.load_account() or {}
+    return {"ok": True, "email": str(data.get("email") or ""),
+            "logged_in": bool(data.get("token"))}
+
+
+@app.post("/api/workshop/account")
+def workshop_account_login(
+    body: WorkshopAccountBody,
+    authorization: str = FastAPIHeader("", alias="Authorization"),
+):
+    """无头端登录星群账号（只用来给插件投稿，跟控制台自己的登录无关）。"""
+    _require_auth(authorization)
+    from qbotmanager.core import account as _account
+
+    email = str(body.email or "").strip()
+    if not email or not body.password:
+        raise HTTPException(400, "邮箱和密码都要填")
+    data = _account.login(email, str(body.password))
+    if not data.get("ok"):
+        raise HTTPException(400, str(data.get("detail") or "登录失败"))
+    return {"ok": True, "email": str(data.get("email") or email)}
+
+
+@app.post("/api/workshop/account/logout")
+def workshop_account_logout(authorization: str = FastAPIHeader("", alias="Authorization")):
+    _require_auth(authorization)
+    from qbotmanager.core import account as _account
+
+    _account.clear_account()
+    return {"ok": True}
 @app.get("/api/qweather/config")
 def qweather_config(authorization: str = FastAPIHeader("", alias="Authorization")):
     _require_auth(authorization)
