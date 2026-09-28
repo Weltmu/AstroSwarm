@@ -1,0 +1,27 @@
+{
+  "id": "timer",
+  "name": "定时任务能力包",
+  "version": "1.0.0",
+  "kind": "tool-pack",
+  "description": "定时提醒、到点触发。",
+  "adapters": ["qq_official", "wechat_ilink"],
+  "min_version": "0.4.0",
+  "permissions": ["timer", "send_message"],
+  "tools": [
+    {
+      "name": "set_reminder",
+      "description": "设定一个定时提醒",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "minutes": {"type": "integer", "minimum": 1},
+          "text": {"type": "string"},
+          "target": {"type": "string"}
+        },
+        "required": ["minutes", "text"]
+      },
+      "permissions": ["timer", "send_message"],
+      "lifecycle": "scheduler"
+    }
+  ]
+}

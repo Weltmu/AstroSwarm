@@ -1,0 +1,39 @@
+{
+  "id": "qweather",
+  "name": "和风天气能力包",
+  "version": "1.0.0",
+  "kind": "tool-pack",
+  "tier": "free",
+  "description": "让 AI 查询城市实时天气（温度/天气现象/风/湿度等），用户说“查一下天气”即可自动调用；安装后需在插件页完成和风天气密钥引导配置。",
+  "adapters": ["qq_official", "wechat_ilink", "app"],
+  "min_version": "0.4.0",
+  "permissions": ["network"],
+  "config": {
+    "type": "qweather",
+    "fields": [
+      {"key": "api_host", "label": "API Host", "placeholder": "控制台-设置里的专属 API Host，如 xxx.qweatherapi.com"},
+      {"key": "project_id", "label": "项目ID", "placeholder": "控制台-项目管理里的项目ID"},
+      {"key": "credential_id", "label": "凭据ID", "placeholder": "创建 JWT 凭据后显示的凭据 ID"}
+    ],
+    "keypair": {
+      "private_key_file": "qweather_ed25519_private.pem",
+      "guide_url": "https://dev.qweather.com/docs/configuration/authentication/",
+      "keygen_url": "https://jwt.qweather.com"
+    }
+  },
+  "tools": [
+    {
+      "name": "weather",
+      "description": "查询某个城市当前的天气（温度/天气现象/风/湿度等），比如'沈阳今天天气'传 city='沈阳'。只支持城市实时天气，台风路径/太阳辐射/海洋类数据不支持，被问到时如实说明",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "city": {"type": "string", "description": "城市名，如 沈阳/北京/上海"}
+        },
+        "required": ["city"]
+      },
+      "permissions": ["network"],
+      "lifecycle": "none"
+    }
+  ]
+}
