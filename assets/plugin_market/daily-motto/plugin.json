@@ -1,0 +1,9 @@
+{
+  "id": "daily-motto",
+  "name": "每日一言",
+  "version": "1.0.0",
+  "category": "功能扩展",
+  "description": "说「每日一言」随机回一句名言短句，QQ 官方与微信 iLink 均可用。",
+  "adapters": ["qq_official", "wechat_ilink"],
+  "min_version": "0.1.0"
+}

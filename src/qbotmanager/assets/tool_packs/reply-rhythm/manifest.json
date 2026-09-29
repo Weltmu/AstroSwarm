@@ -1,0 +1,20 @@
+{
+  "id": "reply-rhythm",
+  "name": "回复节奏能力包",
+  "version": "1.0.0",
+  "kind": "behavior-pack",
+  "description": "真人回复节奏：忙时慢几分钟回、闲时偶尔慢半拍，让回复不再机械秒回。",
+  "adapters": ["qq_official", "wechat_ilink"],
+  "min_version": "0.4.0",
+  "permissions": [],
+  "tools": [],
+  "behavior": {
+    "activity_delay": {
+      "busy_long_probability": 0.35,
+      "busy_long_seconds": [180, 900],
+      "busy_short_seconds": [8, 40],
+      "idle_probability": 0.1,
+      "idle_seconds": [60, 180]
+    }
+  }
+}

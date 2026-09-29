@@ -1,0 +1,1577 @@
+/* ==========================================================================
+   无头端 Web 控制台 —— 1:1 对齐 Windows 端（PySide6）ui/theme.py
+   --------------------------------------------------------------------------
+   令牌：全部来自 ./tokens.css（由 headless-ui-1to1/gen_tokens.py 从 theme.py 生成）
+   几何：来自 headless-ui-1to1/windows-ref/home-spec.txt 与 theme.py 的 QSS 实测：
+         标题栏 44 / 侧边栏 180 / 导航行 54+2 / 分组标题 27 / 页边距 20·24 /
+         卡片间距 14 / 卡片内边距 12·16(18)·14 / 按钮高 33 / 圆角 12·8
+   类名：保持与原 App.jsx 一致，只换皮不换结构（外壳与首页已按实测重排）
+   ========================================================================== */
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+
+/* 滚动条：对齐桌面端 QScrollBar（透明轨道 + 8px、rgba(255,255,255,.14) 圆角滑块，悬停走强调色）
+   不写这段的话 Chrome 会画成亮白色默认条，在深色玻璃上非常跳。
+   注意：Chrome 里一旦写了 scrollbar-width:thin 就会忽略 ::-webkit-scrollbar 的 8px（变成 10px），
+   而桌面端是 8px —— 设置页那种会滚动的内容宽度会差 2px，所以 thin 只留给不认
+   ::-webkit-scrollbar 的浏览器（Firefox）。 */
+@supports not selector(::-webkit-scrollbar) {
+  * { scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.14) transparent; }
+}
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.14); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--as-accent-glow); }
+::-webkit-scrollbar-button { display: none; }
+
+body {
+  font-family: var(--as-font-sans);
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--as-text);
+  background:
+    radial-gradient(1200px 720px at 18% -12%, #16203a 0%, rgba(22, 32, 58, 0) 62%),
+    radial-gradient(900px 620px at 92% 112%, #141c33 0%, rgba(20, 28, 51, 0) 58%),
+    var(--as-bg-0);
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+}
+.mono { font-family: var(--as-font-mono); font-size: 12px; }
+
+/* ------------------------------------------------------------- 外壳骨架 */
+.shell { display: flex; flex-direction: column; height: 100%; position: relative; z-index: 1; }
+
+/* ------------------------------------------- 动态背景层（设置页「外观与动态背景」）
+   桌面端是 image_background/video_background 两个 QWidget 垫在最底层，
+   同样带「遮罩强度」压暗、「视频亮度」调亮度；不启用时这一层是空的，
+   body 自己的径向渐变照旧。 */
+.bg-media { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; background: var(--as-bg-0); }
+.bg-media img, .bg-media video {
+  width: 100%; height: 100%; object-fit: cover; display: block;
+  filter: brightness(var(--as-bg-bright, 1));
+}
+.bg-media__mask { position: absolute; inset: 0; background: #060910; opacity: var(--as-bg-mask, 0.68); }
+body.has-bg { background: var(--as-bg-0); }
+
+/* ============================ 三套 UI 主题（对齐 theme.py 的 UI_THEMES）============================
+   极光玻璃 glass / sidebar：现在这套（深色玻璃 + 侧边栏）
+   瑞士极简 swiss / topnav：浅色 #F7F7F5、直角、1px 细线，导航搬到 54 高的顶栏
+   深空终端 terminal / rail：近黑 #0A0D10、等宽字体、54 宽图标栏、强调色细边
+   三套导航都渲染在 DOM 里，用 CSS 切换显示 —— 切主题时不重挂载页面（桌面端也是这个思路）。 */
+.topnav, .rail { display: none; }
+
+html[data-ui-theme='swiss'] .sidebar-wrap { display: none; }
+html[data-ui-theme='swiss'] .topnav { display: flex; }
+html[data-ui-theme='terminal'] .sidebar-wrap { display: none; }
+html[data-ui-theme='terminal'] .rail { display: flex; }
+
+/* ---------------------------------------------------------------- 瑞士极简 */
+html[data-ui-theme='swiss'] {
+  --as-bg-0: #F7F7F5;
+  --as-text: #111111;
+  --as-text-2: #444444;
+  --as-text-3: #6B6B67;
+  --as-panel: #FFFFFF;
+  --as-panel-strong: #FFFFFF;
+  --as-panel-solid: #FFFFFF;
+  --as-border-light: #D9D9D6;
+  --as-border-strong: #C9C9C5;
+  --as-radius: 0px;
+  --as-radius-sm: 0px;
+  --as-window-radius: 0px;
+}
+html[data-ui-theme='swiss'] body { background: #F7F7F5; color: #111111; }
+html[data-ui-theme='swiss'] .bg-media__mask { background: #F7F7F5; }
+html[data-ui-theme='swiss'] .titlebar { background: #FFFFFF; border-bottom: 1px solid #D9D9D6; }
+html[data-ui-theme='swiss'] .titlebar__title { font-weight: 700; color: #111111; }
+html[data-ui-theme='swiss'] .titlebar__ver { color: #6B6B67; }
+html[data-ui-theme='swiss'] .card,
+html[data-ui-theme='swiss'] .group {
+  /* 桌面端的瑞士面板是 QFrame 自绘描边、不占布局（content 距卡片左边 18 而不是 19），
+     所以这里用 inset 阴影画边框，别用 border。 */
+  background: #FFFFFF; border: none; box-shadow: inset 0 0 0 1px #D9D9D6;
+  background-image: none;
+}
+html[data-ui-theme='swiss'] .btn {
+  background: #FFFFFF; border: 1px solid #C9C9C5; border-radius: 0; color: #111111;
+  height: 35px; padding: 0 16px;
+}
+html[data-ui-theme='swiss'] .btn:hover { background: #EFEFEC; border-color: #A9A9A4; }
+html[data-ui-theme='swiss'] .btn:active { background: #E4E4E0; }
+html[data-ui-theme='swiss'] .btn:disabled { color: #A5A5A1; background: #F1F1EE; border-color: #E0E0DC; }
+html[data-ui-theme='swiss'] .btn--primary {
+  background: var(--as-accent); border: 1px solid var(--as-accent); color: #FFFFFF;
+  border-radius: 0; font-weight: 700;
+}
+html[data-ui-theme='swiss'] .btn--primary:hover { background: var(--as-accent-hover); border-color: var(--as-accent-hover); }
+html[data-ui-theme='swiss'] .btn--primary:disabled { background: #F1F1EE; border-color: #E0E0DC; color: #A5A5A1; }
+html[data-ui-theme='swiss'] .btn--danger { background: #FFFFFF; border-color: #E30613; color: #E30613; }
+html[data-ui-theme='swiss'] .btn--danger:hover { background: #E30613; color: #FFFFFF; }
+html[data-ui-theme='swiss'] .btn--ghost { background: transparent; }
+html[data-ui-theme='swiss'] .p-list,
+html[data-ui-theme='swiss'] .brain-list { background: #FFFFFF; border-color: #D9D9D6; border-radius: 0; }
+html[data-ui-theme='swiss'] .p-item--on { background: #111111; color: #FFFFFF; }
+html[data-ui-theme='swiss'] .p-select,
+html[data-ui-theme='swiss'] .p-input,
+html[data-ui-theme='swiss'] .kv-row select,
+html[data-ui-theme='swiss'] .kv-row input,
+html[data-ui-theme='swiss'] .msg-bar select,
+html[data-ui-theme='swiss'] .log-select,
+html[data-ui-theme='swiss'] .num-item > input,
+html[data-ui-theme='swiss'] .brain-area {
+  background: #FFFFFF; border: 1px solid #C9C9C5; border-radius: 0; color: #111111;
+}
+html[data-ui-theme='swiss'] .log-view { background: #FFFFFF; border-color: #D9D9D6; border-radius: 0; color: #111111; }
+html[data-ui-theme='swiss'] .check > input[type='checkbox'] { border-radius: 0; background: #FFFFFF; }
+html[data-ui-theme='swiss'] .card__note, html[data-ui-theme='swiss'] .card__info { color: #6B6B67; }
+html[data-ui-theme='swiss'] .toast { background: #111111; color: #FFFFFF; border-radius: 0; }
+html[data-ui-theme='swiss'] .empty-state__title { color: #111111; }
+/* 瑞士的输入框 32 高、下拉 33 高（玻璃是 34/35）；另外桌面端 QScrollArea 视口是 1588
+   （1600−12）而不是 1600−8，滚动条按 12 算，两栏宽度才是 763/763、右栏才会落在 801。 */
+html[data-ui-theme='swiss'] .p-input,
+html[data-ui-theme='swiss'] .kv-row input { height: 32px; }
+html[data-ui-theme='swiss'] .p-select,
+html[data-ui-theme='swiss'] .kv-row select,
+html[data-ui-theme='swiss'] .msg-bar select,
+html[data-ui-theme='swiss'] .log-select { height: 33px; }
+html[data-ui-theme='swiss'] ::-webkit-scrollbar { width: 12px; }
+/* 瑞士的 QCheckBox 是 20 高（玻璃 18）—— 一行差 2px，两行就把下面整体推 4px */
+html[data-ui-theme='swiss'] .check { height: 20px; line-height: 20px; }
+/* swiss 的 QSlider：槽 2px #C9C9C5、滑块 14 宽直角纯黑（其它主题沿用玻璃那套） */
+html[data-ui-theme='swiss'] .set-row input[type='range']::-webkit-slider-runnable-track {
+  height: 2px; border-radius: 0; background: #C9C9C5;
+}
+html[data-ui-theme='swiss'] .set-row input[type='range']::-webkit-slider-thumb {
+  width: 14px; height: 14px; margin-top: -6px; border-radius: 0; background: #111111; border: none;
+}
+
+/* 顶栏：54 高、账号按钮 + 两组导航 + 竖分隔线（选中 = 深色文字 + 2px 强调色下划线） */
+.topnav {
+  flex: 0 0 54px; height: 54px; align-items: center; gap: 2px;
+  padding: 0 24px 0 16px; box-sizing: border-box;
+}
+html[data-ui-theme='swiss'] .topnav { background: #FFFFFF; border-bottom: 1px solid #D9D9D6; }
+.topnav__account {
+  display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px;
+  border: 1px solid var(--as-border-strong); border-radius: 0; background: transparent;
+  font: inherit; font-size: 12.5px; cursor: pointer; color: var(--as-text);
+}
+.topnav__account:hover { background: rgba(0, 0, 0, 0.05); }
+.topnav__sep { width: 1px; height: 22px; background: #D9D9D6; margin: 0 8px; }
+.topnav__item {
+  display: inline-flex; align-items: center; gap: 6px; height: 54px; padding: 0 16px;
+  border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent;
+  color: inherit; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.topnav__item:hover { color: #111111; }
+.topnav__item--on { color: #111111; border-bottom-color: var(--as-accent); }
+
+/* ---------------------------------------------------------------- 深空终端 */
+html[data-ui-theme='terminal'] {
+  --as-bg-0: #0A0D10;
+  --as-text: #E6EDF3;
+  --as-text-2: #9BA7B4;
+  --as-text-3: #7E8A9C;
+  --as-panel: #11151A;
+  --as-panel-strong: #11151A;
+  --as-panel-solid: #11151A;
+  --as-border-light: rgba(255, 255, 255, 0.10);
+  --as-border-strong: rgba(255, 255, 255, 0.14);
+  --as-radius: 6px;
+  --as-radius-sm: 4px;
+  --as-font-sans: "Cascadia Mono", "Microsoft YaHei UI", Consolas, monospace;
+}
+html[data-ui-theme='terminal'] body { background: #0A0D10; color: #E6EDF3; }
+html[data-ui-theme='terminal'] .titlebar { background: #0E1217; border-bottom: 1px solid rgba(255, 255, 255, 0.10); }
+html[data-ui-theme='terminal'] .card,
+html[data-ui-theme='terminal'] .group {
+  background: #11151A; border: 1px solid rgba(255, 255, 255, 0.10);
+  border-top-color: rgba(255, 255, 255, 0.10); background-image: none;
+}
+html[data-ui-theme='terminal'] .card__title { font-size: 14px; line-height: 18px; letter-spacing: 0.5px; }
+/* 终端用的是等宽字体，行距比雅黑紧：12px 行高 15、副标题 16（玻璃/瑞士是 16 / 17） */
+html[data-ui-theme='terminal'] .card__note,
+html[data-ui-theme='terminal'] .card__info { line-height: 15px; }
+html[data-ui-theme='terminal'] .page-head h1 { font-size: 21px; line-height: 27px; letter-spacing: 1px; }
+html[data-ui-theme='terminal'] .page-head p { font-size: 12px; line-height: 16px; }
+html[data-ui-theme='terminal'] .btn {
+  height: 30px; padding: 0 13px; font-size: 12px; border-radius: 4px;
+  background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.14);
+}
+html[data-ui-theme='terminal'] .btn:hover { background: rgba(255, 255, 255, 0.09); border-color: rgba(255, 255, 255, 0.24); }
+html[data-ui-theme='terminal'] .btn:disabled { color: #5C6672; background: rgba(255, 255, 255, 0.02); border-color: rgba(255, 255, 255, 0.05); }
+html[data-ui-theme='terminal'] .btn--primary {
+  background: var(--as-accent); border: 1px solid var(--as-accent); color: #05070A;
+  font-weight: 700; border-radius: 4px;
+}
+html[data-ui-theme='terminal'] .btn--primary:hover { background: var(--as-accent-hover); border-color: var(--as-accent-hover); }
+html[data-ui-theme='terminal'] .btn--primary:disabled { background: color-mix(in srgb, var(--as-accent) 35%, transparent); border-color: color-mix(in srgb, var(--as-accent) 35%, transparent); color: rgba(5, 7, 10, 0.6); }
+html[data-ui-theme='terminal'] .p-list,
+html[data-ui-theme='terminal'] .brain-list { background: #0B0F14; border-color: rgba(255, 255, 255, 0.10); border-radius: 4px; }
+html[data-ui-theme='terminal'] .p-select,
+html[data-ui-theme='terminal'] .p-input,
+html[data-ui-theme='terminal'] .kv-row select,
+html[data-ui-theme='terminal'] .kv-row input,
+html[data-ui-theme='terminal'] .msg-bar select,
+html[data-ui-theme='terminal'] .log-select,
+html[data-ui-theme='terminal'] .num-item > input,
+html[data-ui-theme='terminal'] .brain-area {
+  background: #0B0F14; border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 4px;
+  color: #E6EDF3; font-size: 12px;
+}
+html[data-ui-theme='terminal'] .log-view { background: #07090C; border-color: rgba(255, 255, 255, 0.10); border-radius: 4px; color: #C9D4E4; }
+/* 终端列表项：12px 等宽 + 行高 15（玻璃 13/16） */
+html[data-ui-theme='terminal'] .p-item { font-size: 12px; line-height: 15px; }
+/* 终端 QListWidget 的 QSS 是 padding 3 / item padding 5·8（玻璃 4 / 6·8） */
+html[data-ui-theme='terminal'] .p-list,
+html[data-ui-theme='terminal'] .brain-list { padding: 3px; }
+html[data-ui-theme='terminal'] .p-item { padding: 5px 8px; }
+/* 下拉框也是按内容算宽的，各主题字体不同 → 宽度不同（桌面端实测）：
+   日志 来源 100/90/92、级别 88/78/78；消息中心 85/75/80 */
+html[data-ui-theme='swiss'] .log-select--src { width: 90px; }
+html[data-ui-theme='swiss'] .log-select--lv { width: 78px; }
+html[data-ui-theme='swiss'] .msg-bar select { width: 75px; }
+html[data-ui-theme='terminal'] .log-select--src { width: 92px; }
+html[data-ui-theme='terminal'] .log-select--lv { width: 78px; }
+html[data-ui-theme='terminal'] .msg-bar select { width: 80px; }
+/* 终端 QSpinBox 内层输入框跟着 12px 字号走 */
+html[data-ui-theme='terminal'] .num-item > input { font-size: 12px; }
+
+/* 图标栏：54 宽、44 行高、图标 20；选中 = 强调色底 12% + 左侧 2px 强调色边 */
+.rail {
+  flex: 0 0 54px; width: 54px; flex-direction: column; align-items: center;
+  padding: 8px 0; box-sizing: border-box;
+}
+html[data-ui-theme='terminal'] .rail { background: transparent; border-right: 1px solid rgba(255, 255, 255, 0.08); }
+.rail__account {
+  width: 40px; height: 36px; display: flex; align-items: center; justify-content: center;
+  border: 0; border-radius: 4px; background: transparent; color: #9BA7B4; cursor: pointer;
+}
+.rail__account:hover { background: rgba(255, 255, 255, 0.05); color: #E6EDF3; }
+.rail__item {
+  width: 54px; height: 44px; display: flex; align-items: center; justify-content: center;
+  border: 0; border-left: 2px solid transparent; border-radius: 0; background: transparent;
+  color: #9BA7B4; cursor: pointer;
+}
+.rail__item:hover { background: rgba(255, 255, 255, 0.05); }
+.rail__item--on {
+  background: color-mix(in srgb, var(--as-accent) 12%, transparent);
+  border-left-color: var(--as-accent);
+  color: var(--as-accent);
+}
+
+/* 减少界面动效：关掉过渡与动画（桌面端是关进度条平滑动画等） */
+html.reduce-motion *, html.reduce-motion *::before, html.reduce-motion *::after {
+  transition: none !important; animation: none !important;
+}
+
+/* UI 框质感：液态玻璃 = 通透渐变 + 高光描边；颗粒磨砂 = 叠一层细噪点 */
+html[data-glass='liquid'] .card,
+html[data-glass='liquid'] .group {
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0) 62%);
+  border-top-color: rgba(255, 255, 255, 0.30);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10);
+}
+html[data-glass='frosted'] .card,
+html[data-glass='frosted'] .group {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='0.055'/%3E%3C/svg%3E");
+}
+
+/* （三套 UI 主题的配色/布局在文件上方「三套 UI 主题」一节里统一处理） */
+
+/* 标题栏：桌面端 TitleBar 44 高，rgba(10,13,20,.72) + 底部 1px 描边。
+   浏览器里没法复刻窗口按钮，右侧改放登录状态（桌面端放在「星群账号」tooltip 里）。 */
+.titlebar {
+  flex: 0 0 44px; height: 44px;
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 16px;
+  background: rgba(10, 13, 20, 0.72);
+  border-bottom: 1px solid var(--as-border-light);
+}
+.titlebar__title { font-size: 14px; font-weight: 600; letter-spacing: 0.5px; color: var(--as-text); }
+.titlebar__ver { font-size: 11px; color: var(--as-text-3); }
+.titlebar__right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+
+.app { display: flex; flex: 1; min-height: 0; }
+
+/* ------------------------------- 侧边栏（180 宽，同桌面端 sidebarWrap） */
+.sidebar-wrap {
+  width: 180px; flex: 0 0 180px;
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 10px 8px;
+}
+
+/* 「星群账号」入口：objectName=ghost，33 高、图标 16 + 文案 13、居中 */
+.sidebar-account {
+  height: 33px; flex: 0 0 33px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  border: 1px solid var(--as-border-light); border-radius: var(--as-radius-sm);
+  background: transparent; color: var(--as-text);
+  font: inherit; font-size: 13px; cursor: pointer;
+  transition: background 0.15s ease;
+}
+.sidebar-account:hover { background: rgba(255, 255, 255, 0.06); }
+.sidebar-account svg { color: var(--as-text-2); }
+
+/* 分组标题：164×27，16px/800、色 TEXT_2、左内边距 12、上内边距 6 */
+.sidebar-group-title {
+  flex: 0 0 27px; height: 27px;
+  padding: 6px 0 0 12px;
+  font-size: 16px; font-weight: 800; line-height: 21px;
+  color: var(--as-text-2);
+  white-space: nowrap; overflow: hidden;
+}
+
+/* 列表容器：桌面端 QListWidget#sidebar = rgba(10,14,22,.55) + 8 圆角 + 10/8 内边距 */
+.sidebar-list {
+  background: rgba(10, 14, 22, 0.55);
+  border-radius: var(--as-radius-sm);
+  padding: 10px 8px;
+  overflow: auto;
+}
+/* 两个列表按桌面端 stretch 5:6 精确分高：
+   容器内容高 - (账号 33 + 两个分组标题 27×2 + 4 个 6px 间距) = 可分配高度 */
+.sidebar-list--platform { flex: 0 0 auto; height: calc((100% - 111px) * 5 / 11); }
+.sidebar-list--global { flex: 0 0 auto; height: calc((100% - 111px) * 6 / 11); }
+
+/* 导航项：item 行高 58（54 胶囊 + 上下 2 外边距），8 圆角、10/14 内边距、14px 字 */
+.nav-item {
+  display: flex; align-items: center; gap: 6px;
+  width: 100%; height: 54px; margin: 2px 0; padding: 0 14px;
+  border: 0; border-radius: var(--as-radius-sm);
+  background: transparent; color: var(--as-text-2);
+  font: inherit; font-size: 14px; text-align: left; cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.nav-item svg { flex: 0 0 auto; }
+.nav-item:hover { background: rgba(255, 255, 255, 0.06); color: var(--as-text); }
+.nav-item--on { background: var(--as-accent-soft); color: #fff; font-weight: 600; }
+
+/* ---------------------------------------------------------- 主区 / 页头 */
+.main { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow-y: auto; }
+.page {
+  flex: 1 0 auto;
+  display: flex; flex-direction: column; gap: 14px;
+  padding: 20px 24px;
+  min-height: 0;
+}
+/* 页头：标题 22/600 行高 28，副标题 13 行高 17（间距 14） */
+.page-head { display: flex; align-items: flex-start; gap: 12px; }
+.page-head h1 { margin: 0; font-size: 22px; font-weight: 600; line-height: 28px; letter-spacing: 0.5px; }
+.page-head p { margin: 14px 0 0; color: var(--as-text-2); font-size: 13px; line-height: 17px; }
+/* 页头右侧整块也要拉满头部高度，里面的徽标才能跟着到 59（桌面端就是这样） */
+.page-head__right { margin-left: auto; align-self: stretch; display: flex; align-items: stretch; gap: 8px; }
+.page-head__time { color: var(--as-text-3); font-size: 12px; }
+.page-head .hint, .page-head > .mono, .page-head > span { color: var(--as-text-3); font-size: 12px; }
+
+/* --------------------------------------------- 卡片：桌面端 PANEL + 12 圆角 */
+.group, .panel, .cta, .info-strip, .empty, .log, .presets, .card, .status-cell {
+  background: var(--as-panel);
+  border: 1px solid var(--as-border-light);
+  border-top-color: var(--as-border-strong);
+  border-radius: var(--as-radius);
+  padding: 12px 16px 14px;
+}
+/* 卡片是纵向容器：内部列表/空状态用 flex:1 撑满（同桌面端 QVBoxLayout）
+   桌面端卡片内间距一律 6，子元素自己不再带上边距 */
+.card { display: flex; flex-direction: column; gap: 6px; }
+.card--strong, .group--strong { background: var(--as-panel-strong); }
+.card--wide { padding-left: 18px; padding-right: 18px; }
+.card__title { margin: 0; font-size: 15px; font-weight: 600; line-height: 20px; color: var(--as-text); }
+.card__body { margin: 0; }
+.card__info { margin: 0; color: var(--as-text-3); font-size: 12px; line-height: 16px; white-space: pre-line; }
+.card__actions { display: flex; align-items: center; gap: 6px; }
+
+.group__head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; }
+.group__head h2 { margin: 0; font-size: 15px; font-weight: 600; line-height: 20px; }
+.group__head p { margin: 0; color: var(--as-text-3); font-size: 12px; }
+.subhead { margin: 6px 0; color: var(--as-text-3); font-size: 12px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } }
+
+/* ------------------------------------------------------------ 首页栅格
+   实测：行 132 / 518(弹性) / 165，列 1:1、407:951、543:815，间距一律 14 */
+.home-body { flex: 1; min-height: 0; display: grid; grid-template-rows: 132px minmax(0, 1fr) 165px; gap: 14px; }
+.home-row { display: grid; gap: 14px; min-height: 0; }
+.home-row--cards { grid-template-columns: 1fr 1fr; }
+.home-row--mid { grid-template-columns: 407fr 951fr; }
+.home-row--bottom { grid-template-columns: 543fr 815fr; }
+/* 三套主题的三行高度不同（桌面端实测）：按钮 33/35/30 高、标题字号也不同 ——
+   首页 132/165（玻璃）、132/169（瑞士）、129/154（终端）；中间那行都是弹性行，跟着变。
+   写死这三行是刻意的：中间行用 1fr 吸收差额，卡片里 flex:1 的列表再自己收缩。 */
+html[data-ui-theme='swiss'] .home-body { grid-template-rows: 132px minmax(0, 1fr) 169px; }
+html[data-ui-theme='terminal'] .home-body { grid-template-rows: 129px minmax(0, 1fr) 154px; }
+html[data-ui-theme='terminal'] .home-row--mid { grid-template-columns: 445fr 1039fr; }
+html[data-ui-theme='terminal'] .home-row--bottom { grid-template-columns: 594fr 890fr; }
+.home-time { color: var(--as-text-3); font-size: 12px; line-height: 17px; }
+
+/* 今日数据：12px 行、行距 22（行高 16 + 间距 6），值右对齐 */
+.stat-rows { display: flex; flex-direction: column; gap: 6px; }
+.stat-row { display: flex; align-items: center; font-size: 12px; line-height: 16px; color: var(--as-text-3); }
+.stat-row b { margin-left: auto; font-weight: 400; color: var(--as-text-3); }
+
+/* 最近消息：列表透明无边框，行 12px / padding 6·4 / 底部分隔线 */
+.recent-list {
+  flex: 1; min-height: 0; overflow: auto;
+  display: flex; flex-direction: column;
+}
+.recent-list__item {
+  padding: 6px 4px; font-size: 12px; line-height: 16px; color: #9FB0C8;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+.recent-list__empty { padding: 6px 4px; font-size: 12px; color: var(--as-text-3); }
+.card__foot { }
+
+/* ------------------------------------------------- 微信页（对齐 wechat_page.py）
+   提示条 28 高（12px 字 + 6/8 内边距）、二维码占位 200×200 白底、按钮组间距 6 */
+.gate-lock {
+  margin: 0; padding: 6px 8px;
+  background: rgba(245, 158, 11, 0.10);
+  border-radius: 6px;
+  color: #F59E0B; font-size: 12px; line-height: 16px;
+}
+/* margin 必须为 0：卡片 gap 已经提供 6px 的节奏，再写上边距就变 12（踩过，整页下移 6px） */
+.card__note { margin: 0; color: var(--as-text-3); font-size: 12px; line-height: 16px; white-space: pre-line; }
+.card--wx { padding: 14px 18px 16px; gap: 8px; }
+
+.qr-box {
+  width: 200px; height: 200px; margin: 0 auto; padding: 0 10px;
+  display: flex; align-items: center; justify-content: center; text-align: center;
+  white-space: pre-line;
+  background: #FFFFFF; border-radius: 8px;
+  color: #64748B; font-size: 12px; line-height: 16px;
+}
+/* 微信页按钮组的间距是 8（实测 223/339/442/558/661），跟首页卡片里的 6 不一样 */
+.btn-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.card--fill { flex: 1 1 auto; min-height: 0; }
+/* 单独摆放的按钮（如「保存通道配置」）不要被拉满整行 */
+.btn--self { align-self: flex-start; }
+
+/* --------------------------------------------- QQ 页（对齐 run_page.py）
+   卡片内边距 14/18/16；表单行 = 左标签 + 右侧控件（控件右对齐到卡片内缘）。
+   实测：select 274×35 / input 180×34 / 端口 input 145×34 / 地址 input 1238×34 + 按钮 88×33 */
+.card--kv { padding: 14px 18px 16px; }
+.kv-row {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12px; line-height: 16px; color: var(--as-text-3);
+}
+.kv-row > select, .kv-row > input { margin-left: auto; }
+.kv-row select, .kv-row input {
+  height: 34px; padding: 0 10px;
+  border: 1px solid var(--as-border-light); border-radius: var(--as-radius-sm);
+  background: rgba(6, 9, 16, 0.55); color: var(--as-text);
+  font: inherit; font-size: 12.5px;
+}
+/* 卡片内的嵌套组：组内间距 8；卡片自身间距是 6，所以「卡片直属的那个组」要多 2 才对齐
+   （实测 QQ 通道配置卡：490/514/557/613/655/697/739 —— 490 是卡片直属的提示段，
+   514 是第一层组的首行；第二层组在组内已经有 8 的间距，再加 2 就会整体下移 2px） */
+.kv-group { display: flex; flex-direction: column; gap: 8px; }
+.card--kv > .kv-group { margin-top: 2px; }
+.kv-row select { width: 274px; height: 35px; }
+/* Qt 的 QComboBox 按内容算宽度：接入方式 274、连接方式 252（都是右对齐到卡片内缘）。
+   Chrome 的 select 自带内边距和下拉箭头，宽度跟 Qt 对不上，只能按实测值固定。 */
+.kv-row select.kv-select--ws { width: 252px; }
+.kv-row input { width: 180px; }
+.kv-row input:disabled { color: var(--as-text-3); }
+.kv-row--url > input { width: auto; flex: 1 1 auto; margin-left: 0; }
+.kv-row--url > .btn { flex: 0 0 auto; }
+
+/* 快速操作：三枚整宽按钮，间距 6 */
+.stack { display: flex; flex-direction: column; gap: 6px; }
+
+/* ------------------------------------------------------------ 按钮体系
+   桌面端 QPushButton：33 高、8 圆角、13px、padding 7·14、bg rgba(255,255,255,.06) */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: 33px; padding: 0 14px;
+  border-radius: var(--as-radius-sm);
+  border: 1px solid var(--as-border-light);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--as-text); font: inherit; font-size: 13px; line-height: 17px; cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.btn:hover { background: rgba(255, 255, 255, 0.10); border-color: var(--as-border-strong); }
+.btn:active { background: rgba(255, 255, 255, 0.05); }
+.btn:disabled { color: var(--as-text-3); background: rgba(255, 255, 255, 0.02); border-color: rgba(255, 255, 255, 0.04); cursor: not-allowed; }
+/* 主按钮：桌面端是 ACCENT → ACCENT_ACTIVE 的横向渐变 */
+.btn--primary {
+  background: linear-gradient(90deg, var(--as-accent) 0%, var(--as-accent-active) 100%);
+  border: none; color: #fff; font-weight: 600;
+  padding: 0 18px;
+}
+.btn--primary:hover { background: linear-gradient(90deg, var(--as-accent-hover) 0%, var(--as-accent) 100%); }
+.btn--danger { background: rgba(248, 113, 113, 0.12); border-color: rgba(248, 113, 113, 0.35); color: #FCA5A5; }
+.btn--danger:hover { background: rgba(248, 113, 113, 0.22); border-color: rgba(248, 113, 113, 0.35); }
+.btn--ghost { background: transparent; }
+.btn--ghost:hover { background: rgba(255, 255, 255, 0.06); }
+.stack > .btn, .btn--block { width: 100%; }
+.btn--sm { height: 28px; padding: 0 12px; font-size: 12.5px; }
+.toolbar, .actions, .savebar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* Toast：桌面端 QLabel#toast（rgba(19,26,40,.92) + 16 圆角 + 8·18 内边距） */
+.toast {
+  position: fixed; right: 24px; bottom: 20px; z-index: 40;
+  padding: 8px 18px;
+  background: rgba(19, 26, 40, 0.92);
+  border: 1px solid var(--as-border-strong);
+  border-radius: 16px;
+  color: var(--as-text); font-size: 13px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+/* ------------------------------------------- 状态徽章（StatusBadge 9px 色点 + 13px 文案） */
+/* 桌面端页头里的 StatusBadge 是被拉满整行高的（59），里面文字也拉满（49）居中；
+   放进 .page-head__right 时跟着头部高度走，卡片里的徽标仍是内容高度。 */
+.badge {
+  display: inline-flex; align-items: stretch; gap: 7px;
+  padding: 5px 12px 5px 10px;
+  border-radius: 6px;
+}
+.page-head__right > .badge { align-self: stretch; }
+.badge__dot { align-self: center; width: 9px; height: 9px; border-radius: 4px; background: currentColor; box-shadow: 0 0 6px currentColor; }
+.badge__label { display: flex; align-items: center; font-size: 13px; font-weight: 600; line-height: 17px; color: var(--as-text-2); }
+.badge--running, .badge--success, .badge--ok, .badge--connected { color: var(--as-status-running); }
+.badge--stopped, .badge--failed, .badge--err, .badge--error { color: var(--as-status-stopped); }
+.badge--warn, .badge--warning, .badge--pending { color: var(--as-status-warning); }
+.badge--info { color: var(--as-status-info); }
+.badge--unknown, .badge--idle { color: var(--as-status-unknown); }
+
+/* 旧的状态条（其它页面仍在用） */
+.status-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+.status-cell strong { font-size: 14px; }
+.status-cell .mono { display: block; margin-top: 6px; color: var(--as-text-2); }
+
+/* ------------------------------------------------------------ 标签 / 徽标 */
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 22px; padding: 0 10px; border-radius: 999px;
+  border: 1px solid var(--as-border-light);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--as-text-2); font-size: 11.5px;
+}
+.chip--warn { color: var(--as-warn); border-color: rgba(251, 191, 36, 0.35); background: rgba(251, 191, 36, 0.08); }
+.chip--ok { color: var(--as-success); border-color: rgba(52, 211, 153, 0.35); background: rgba(52, 211, 153, 0.08); }
+.chip--err { color: var(--as-danger); border-color: rgba(248, 113, 113, 0.35); background: rgba(248, 113, 113, 0.08); }
+
+/* ------------------------------------------------------------ 列表 / 行 */
+.list { display: flex; flex-direction: column; gap: 6px; }
+.row-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border-radius: var(--as-radius-sm);
+  border: 1px solid var(--as-border-light);
+  background: rgba(255, 255, 255, 0.03);
+}
+.row-item__main { font-size: 13px; font-weight: 600; }
+.row-item__desc { color: var(--as-text-2); font-size: 12px; }
+.row-item__foot { margin-left: auto; color: var(--as-text-3); font-size: 11.5px; }
+
+/* ----------------------------------------------- 消息流（首页/消息中心） */
+.msg {
+  max-width: 78%; padding: 9px 12px;
+  border-radius: var(--as-radius-sm);
+  border: 1px solid var(--as-border-light);
+  background: rgba(255, 255, 255, 0.04);
+}
+.msg--in { align-self: flex-start; }
+
+/* ------------------------------------------------------------------ 表单 */
+.field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.field > span { color: var(--as-text-3); font-size: 12px; }
+.field input, .field textarea, .mono-area, .wake-row input {
+  width: 100%; padding: 9px 11px;
+  border-radius: var(--as-radius-sm);
+  border: 1px solid var(--as-border-light);
+  background: rgba(6, 9, 16, 0.55);
+  color: var(--as-text); font: inherit; font-size: 12.5px;
+}
+.field input:focus, .field textarea:focus, .mono-area:focus {
+  outline: none;
+  border-color: var(--as-accent);
+  box-shadow: 0 0 0 3px var(--as-accent-soft);
+}
+.mono-area { min-height: 120px; font-family: var(--as-font-mono); }
+.wake-row { display: flex; align-items: center; gap: 8px; }
+.radio-row { display: flex; flex-wrap: wrap; gap: 14px; }
+.radio { display: inline-flex; align-items: center; gap: 6px; color: var(--as-text-2); font-size: 12.5px; }
+
+/* ------------------------------------------------------------ 插件网格 */
+.packs { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
+.pack {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 12px 14px; border-radius: var(--as-radius);
+  border: 1px solid var(--as-border-light);
+  background: var(--as-panel-strong);
+}
+.pack:hover { border-color: var(--as-border-strong); }
+.pack--on { border-color: var(--as-accent); box-shadow: 0 0 0 3px var(--as-accent-soft); }
+.pack__check { margin-top: auto; }
+
+/* ------------------------------------------------------------------ 日志 */
+.log { background: rgba(6, 9, 16, 0.72); }
+.log-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.log .mono { max-height: 62vh; overflow: auto; white-space: pre-wrap; line-height: 1.55; color: var(--as-text-2); }
+
+/* ------------------------------------------------------------------ 其它 */
+.empty { padding: 28px 16px; color: var(--as-text-3); text-align: center; }
+.hint { color: var(--as-text-3); font-size: 12px; }
+.cta { display: flex; align-items: center; gap: 10px; }
+.info-strip { color: var(--as-text-2); font-size: 12.5px; display: flex; flex-wrap: wrap; gap: 14px; }
+
+/* 空状态：标题 15/600 TEXT_2、提示 12 TEXT_3、居中、间距 6 */
+.empty-state {
+  flex: 1; min-height: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  text-align: center;
+}
+.empty-state__title { font-size: 15px; font-weight: 600; line-height: 20px; color: var(--as-text-2); }
+.empty-state__hint { font-size: 12px; line-height: 16px; color: var(--as-text-3); }
+
+/* ------------------------------------------- AI 大脑页（对齐 brain_page.py）
+   实测：卡片内边距 14/18/16、卡片内间距 10（不是 6）；
+   表单行 = 左标签（宽度按文字自适应）+ 右侧控件（撑满剩余宽度），行内间距 10。
+   注意：下面这些 --wide 规则必须排在 .kv-row 之后才能覆盖 8px 间距 / 固定宽度。 */
+.card--brain { padding: 14px 18px 16px; gap: 10px; }
+.kv-row--wide { gap: 10px; }
+.kv-row--wide > select,
+.kv-row--wide > input,
+.kv-row--wide > textarea { margin-left: 0; flex: 1 1 auto; width: auto; min-width: 0; }
+.kv-row--wide > b { margin-left: auto; font-weight: 400; }
+/* 桌面端 QLabel 一律被拉满整行高（人格设定那小标签就是 48×84），标签也要 stretch */
+.kv-row--top { align-items: flex-start; }
+.kv-row--top > span { align-self: stretch; }
+.kv-row--wide > input, .kv-row--wide > select { font-size: 13px; }
+/* 平台启用行：桌面端是「标签 + addSpacing(6) + 复选框们（相互间距 10）」 */
+.kv-row--platform { gap: 10px; }
+/* 标签被 Qt 拉成整行高（18），行高要跟着给，否则 y 会偏 1 */
+.kv-row--platform > span:first-child { margin-right: 6px; line-height: 18px; }
+/* Chrome 的 13px 字宽比 Qt 窄约 3px：指示器间距从 QSS 的 8 放到 10，
+   整个复选框宽度才和桌面端一致（QQ 48 / 微信 52），否则后一个复选框会左移 3px */
+.kv-row--platform .check { gap: 10px; }
+
+/* QCheckBox：16×16 指示器 + 8 间距 + 13px 文字，整行高 18；勾选态是纯 ACCENT 圆角块 */
+.check {
+  display: inline-flex; align-items: center; gap: 8px; height: 18px;
+  color: var(--as-text-2); font-size: 13px; line-height: 18px; cursor: pointer;
+}
+.check > input[type='checkbox'] {
+  appearance: none; -webkit-appearance: none;
+  width: 16px; height: 16px; margin: 0; padding: 0; flex: 0 0 auto;
+  border: 1px solid var(--as-border-strong); border-radius: 4px;
+  background: rgba(255, 255, 255, 0.04); cursor: pointer;
+}
+.check > input[type='checkbox']:checked { background: var(--as-accent); border-color: var(--as-accent); }
+
+/* QPlainTextEdit：人格设定 84 高、MCP 96 高，等宽 12px、内边距 6、圆角 10 */
+.brain-area {
+  flex: 1 1 auto; width: auto; height: 84px; min-height: 84px;
+  padding: 6px; border-radius: 10px;
+  font-family: var(--as-font-mono); font-size: 12px; line-height: 16px;
+  resize: vertical;
+}
+.brain-area--mcp { height: 96px; min-height: 96px; }
+
+/* 数字小格：118 宽 ×3 列，列距 12 / 行距 6；标签居中 + 96×21 输入框居中。
+   QSpinBox 在 theme.py 里没有 QSS，走系统样式：无边框无底色，只有一条内缩的下划线，
+   右侧是「上、下」两个并排的小箭头（实测线在逻辑 y=799 内缩左 6 右 5；
+   箭头中心在相对 x≈67 / 84、y≈790，颜色 #DADEE4）。
+   文字按 Qt 的内层行编辑（62 宽、左边距 1）居中 → 右侧留 33 的 padding 即可。 */
+.num-grid { display: grid; grid-template-columns: repeat(3, 118px); column-gap: 12px; row-gap: 6px; }
+.num-item { display: flex; flex-direction: column; gap: 6px; width: 118px; }
+.num-item > span { text-align: center; color: var(--as-text-3); font-size: 12px; line-height: 16px; }
+.num-item > input {
+  appearance: none; -webkit-appearance: none;
+  width: 96px; height: 21px; margin: 0 auto; padding: 0 33px 0 0;
+  text-align: center; font-size: 12px;
+  border: none; border-radius: 0; background-color: transparent; color: var(--as-text);
+  background-image:
+    linear-gradient(#808080, #808080),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='30' height='8' viewBox='0 0 30 8'%3E%3Cg fill='none' stroke='%23DADEE4' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M0.8 6 4.8 2 8.8 6'/%3E%3Cpath d='M17.6 2 22.4 6 27.2 2'/%3E%3C/g%3E%3C/svg%3E");
+  background-repeat: no-repeat, no-repeat;
+  background-size: 85px 1px, 30px 8px;
+  background-position: 6px 19px, right 4px center;
+}
+.num-item > input:focus { outline: none; }
+
+/* 卡片内小列表（对应 QListWidget，无数据时就是一个空框） */
+.brain-list { border: 1px solid var(--as-border-light); border-radius: var(--as-radius-sm); background: rgba(6, 9, 16, 0.35); overflow: auto; }
+.brain-list--110 { height: 110px; }
+.brain-list--130 { height: 130px; }
+.brain-list--90 { height: 90px; }
+.brain-list__row { padding: 6px 10px; font-size: 12.5px; color: var(--as-text-2); }
+.brain-list__empty { margin: 0; padding: 10px; color: var(--as-text-3); font-size: 12px; text-align: center; }
+
+/* 桌面端卡片内按钮组一律 setSpacing(6) */
+.btn-row--6 { gap: 6px; }
+
+/* 空态：Qt 里 QVBoxLayout 的 AlignCenter 把两个标签都拉成「最宽那个」的宽度（233），
+   标题也是 233 宽居中，不限定宽度只会是文字自身的 145 */
+.empty-state--brain .empty-state__title,
+.empty-state--brain .empty-state__hint { width: 233px; }
+
+/* ----------------------------------------- 消息中心（对齐 message_center_page.py）
+   过滤行：平台 24×35 + 下拉 85×35 + 刷新 56×33，行内间距实测 14（不是首页卡片的 6） */
+.msg-bar { display: flex; align-items: center; gap: 14px; }
+.msg-bar > span { color: var(--as-text-3); font-size: 12px; line-height: 16px; }
+.msg-bar select {
+  width: 85px; height: 35px; padding: 0 10px;
+  border: 1px solid var(--as-border-light); border-radius: var(--as-radius-sm);
+  background: rgba(6, 9, 16, 0.55); color: var(--as-text); font-size: 13px;
+}
+/* 玻璃面板：内边距 10/12/12，列表撑满；无会话时列表在桌面端也是隐藏的（面板就是个空框） */
+.card--msg { padding: 10px 12px 12px; }
+.msg-list {
+  flex: 1 1 auto; min-height: 0; overflow: auto;
+  border: 1px solid #2a3a52; border-radius: 8px; background: rgba(9, 12, 19, 0.45);
+}
+.msg-item {
+  padding: 7px 10px; border-bottom: 1px solid rgba(42, 58, 82, 0.4);
+  color: #dbe4f0; font-size: 12px; line-height: 16px; white-space: pre-line;
+}
+/* 空态固定 60 高（9 + 18 + 6 + 18 + 9），不参与伸缩；
+   提示在桌面端是「236 宽的标签里放两行」——Qt 只报了 18 高却画出了第二行，
+   所以这里固定 236×18 且 overflow:visible，绘制与度量都能对上。 */
+.empty-state--messages { flex: 0 0 auto; height: 60px; }
+.empty-state--messages .empty-state__title,
+.empty-state--messages .empty-state__hint { width: 236px; height: 18px; }
+.empty-state--messages .empty-state__hint { overflow: visible; }
+
+/* ------------------------------------------- 插件管理（对齐 plugins_page.py）
+   左右两张面板各 679×598（行内间距 14）→ 全宽「本地插件」169 → 底部「安装任务」48。
+   面板内所有子行间距是 6：Qt 的子布局会继承父布局 spacing（面板 6），不是页面的 14。 */
+.pl-row { display: flex; gap: 14px; flex: 1 1 auto; min-height: 0; }
+.pl-panel { flex: 1 1 0; min-width: 0; padding: 14px 18px 16px; gap: 6px; }
+.pl-local { flex: 0 0 auto; height: 169px; padding: 14px 18px 16px; gap: 6px; }
+.pl-tasks { flex: 0 0 auto; height: 48px; padding: 12px 16px 14px; gap: 6px; }
+
+.p-row { display: flex; align-items: center; gap: 6px; }
+.p-row > span { color: var(--as-text-3); font-size: 12px; line-height: 16px; }
+.p-gap { flex: 1 1 auto; }
+.p-select, .p-input {
+  flex: 1 1 auto; min-width: 0;
+  border: 1px solid var(--as-border-light); border-radius: var(--as-radius-sm);
+  background: rgba(6, 9, 16, 0.55); color: var(--as-text); font-size: 13px;
+}
+.p-select { height: 35px; padding: 0 10px; }
+.p-input { height: 34px; padding: 0 10px; }
+.p-input:disabled, .p-select:disabled { color: var(--as-text-3); }
+
+/* QListWidget：底 rgba(10,14,22,.55)、1px 边框、8 圆角、内边距 4、13px；
+   item 圆角 6 / 内边距 6·8 / 外边距 1（选中走 ACCENT_SOFT） */
+.p-list {
+  border: 1px solid var(--as-border-light); border-radius: 8px;
+  background: rgba(10, 14, 22, 0.55); padding: 4px; overflow: auto;
+}
+.p-list--134 { height: 134px; }
+.p-list--115 { height: 115px; }
+.p-list--72 { height: 72px; }
+.p-row > .p-list { flex: 1 1 auto; min-width: 0; }
+.p-item {
+  display: block; width: 100%; margin: 1px; padding: 6px 8px;
+  border: 0; border-radius: 6px; background: transparent;
+  color: var(--as-text); font: inherit; font-size: 13px; text-align: left; cursor: pointer;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.p-item:hover { background: rgba(255, 255, 255, 0.05); }
+.p-item--on { background: var(--as-accent-soft); }
+
+/* 拖拽提示：居中 + 虚线边框 + 8 圆角 + 内边距 14 */
+.p-drop {
+  margin: 0; padding: 14px; text-align: center;
+  color: var(--as-text-3); font-size: 12px; line-height: 16px;
+  border: 1px dashed rgba(255, 255, 255, 0.18); border-radius: 8px;
+}
+
+/* ------------------------------------------------- 日志（对齐 logs_page.py）
+   玻璃面板内边距 12/16/14、间距 6；过滤行 = 来源(标签+下拉 100) → addSpacing(12)+6 →
+   级别(标签+下拉 88) → 撑开 → 打开日志目录(108) → 清空视图(82)，按钮之间 6；
+   日志视图等宽 12px / 底 rgba(8,11,18,.72) / 1px rgba(255,255,255,.08) / 圆角 10 / 内边距 10。 */
+.log-panel { flex: 1 1 auto; min-height: 0; padding: 12px 16px 14px; gap: 6px; }
+.log-bar { display: flex; align-items: center; gap: 6px; }
+.log-bar > span { color: var(--as-text-3); font-size: 12px; line-height: 16px; }
+.log-bar__gap { margin-left: 12px; }
+.log-bar__spacer { flex: 1 1 auto; }
+.log-select {
+  height: 35px; padding: 0 10px;
+  border: 1px solid var(--as-border-light); border-radius: var(--as-radius-sm);
+  background: rgba(6, 9, 16, 0.55); color: var(--as-text); font-size: 13px;
+}
+.log-select--src { width: 100px; }
+.log-select--lv { width: 88px; }
+.log-view {
+  flex: 1 1 auto; min-height: 0; width: 100%;
+  font-family: var(--as-font-mono); font-size: 12px; line-height: 16px;
+  background: rgba(8, 11, 18, 0.72); border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px; padding: 10px; color: #C6D0E0;
+  white-space: pre; overflow: auto; resize: none;
+}
+.log-view:focus { outline: none; }
+
+/* 插件/依赖页的固定高度块也是按主题变的（桌面端实测）：
+   插件页「本地插件」169/153/162、「安装任务」48/46/46；
+   依赖页「扫描区」111/111/107、「依赖任务」48/46/46。中间那些弹性块会自己吸收差额。 */
+html[data-ui-theme='swiss'] .pl-local { height: 153px; }
+html[data-ui-theme='swiss'] .pl-tasks { height: 46px; }
+html[data-ui-theme='terminal'] .pl-local { height: 162px; }
+html[data-ui-theme='terminal'] .pl-tasks { height: 46px; }
+html[data-ui-theme='swiss'] .dep-scan { height: 111px; }
+html[data-ui-theme='swiss'] .dep-tasks { height: 46px; }
+html[data-ui-theme='terminal'] .dep-scan { height: 107px; }
+html[data-ui-theme='terminal'] .dep-tasks { height: 46px; }
+/* 插件页四个列表的高度也按主题变（桌面端实测）：市场 134/133/146、
+   已装能力包与本地插件 72/56/70、已安装(pyproject) 115/113/127 */
+html[data-ui-theme='swiss'] .p-list--134 { height: 133px; }
+html[data-ui-theme='swiss'] .p-list--72 { height: 56px; }
+html[data-ui-theme='swiss'] .p-list--115 { height: 113px; }
+html[data-ui-theme='terminal'] .p-list--134 { height: 146px; }
+html[data-ui-theme='terminal'] .p-list--72 { height: 70px; }
+html[data-ui-theme='terminal'] .p-list--115 { height: 127px; }
+
+/* --------------------------------------------- 依赖管理（对齐 deps_page.py）
+   扫描区 111 高（固定）→ 缺失清单撑满 → 「依赖任务」48 高（只有标题）。 */
+.dep-scan { flex: 0 0 auto; height: 111px; padding: 14px 18px 16px; gap: 6px; }
+.dep-value { margin: 0; font-size: 14px; font-weight: 600; line-height: 18px; color: var(--as-text); }
+.dep-missing { flex: 1 1 auto; min-height: 0; padding: 14px 18px 16px; gap: 6px; }
+.dep-list { flex: 1 1 auto; min-height: 0; height: auto; }
+.dep-tasks { flex: 0 0 auto; height: 48px; padding: 12px 16px 14px; gap: 6px; }
+
+/* ----------------------------------------------- 设置（对齐 settings_page.py）
+   两栏各 675、间距 14（页面是 QScrollArea → 出现 8px 滚动条时内容宽 1364）；
+   左列 环境信息 564 + AI 插件 114 + 启动行为 176（块间 14，合计 882 = 右列高度）。
+   面板内边距 14/18/16、间距 6；行 = 标签 + 撑开 + 右对齐值（make_row）。
+   滑块：槽 4px rgba(255,255,255,.10)、滑块 14×14 强调色 + 2px 白边。 */
+.set-cols { display: flex; gap: 14px; align-items: flex-start; }
+/* 两栏等宽：用 calc 钉死（只写 flex:1 1 0 时 Chrome 分出来是 660/698，不是均分） */
+.set-left { flex: 0 0 calc((100% - 14px) / 2); min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+.set-info { flex: 0 0 auto; height: 564px; padding: 14px 18px 16px; gap: 6px; overflow: hidden; }
+.set-ai { flex: 0 0 auto; height: 114px; padding: 14px 18px 16px; gap: 6px; overflow: hidden; }
+.set-boot { flex: 0 0 auto; height: 176px; padding: 14px 18px 16px; gap: 6px; overflow: hidden; }
+.set-appr { flex: 0 0 calc((100% - 14px) / 2); min-width: 0; height: 882px; padding: 14px 18px 16px; gap: 6px; }
+/* BETA 提示是一个带框的琥珀色块：内边距 8·10、1px 边框、圆角 8、底 rgba(245,158,11,.12)
+   （上下各取 8.5 才能凑出桌面端实测的 35 高：8.5+16+8.5+2） */
+.set-warn {
+  margin: 0; padding: 8.5px 10px; color: #F59E0B; font-size: 12px; line-height: 16px;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.35); border-radius: 8px;
+}
+
+/* 设置页四块面板的高度也是按主题变的（桌面端实测）：
+   玻璃 564/114/176 + 882、瑞士 568/114/180 + 890、终端 529/111/171 + 845。
+   写死玻璃那一组时，瑞士内容多 4px 就被 flex 压缩 → 下面所有行整体上移 4px。 */
+html[data-ui-theme='swiss'] .set-info { height: 568px; }
+html[data-ui-theme='swiss'] .set-ai { height: 114px; }
+html[data-ui-theme='swiss'] .set-boot { height: 180px; }
+html[data-ui-theme='swiss'] .set-appr { height: 890px; }
+html[data-ui-theme='terminal'] .set-info { height: 529px; }
+html[data-ui-theme='terminal'] .set-ai { height: 111px; }
+html[data-ui-theme='terminal'] .set-boot { height: 171px; }
+html[data-ui-theme='terminal'] .set-appr { height: 845px; }
+/* 终端是等宽字体，值换行后的行高更小：两行 28（玻璃 32）、三行也是 28
+   （等宽字更窄，同一个 pip 源在终端只折 2 行）；输入框/下拉 30 高（玻璃 34） */
+html[data-ui-theme='terminal'] .set-row--kv-2,
+html[data-ui-theme='terminal'] .set-row--kv-3 { height: 28px; }
+/* 终端的 QCheckBox 是 17 高（玻璃 18 / 瑞士 20） */
+html[data-ui-theme='terminal'] .check { height: 17px; line-height: 17px; }
+html[data-ui-theme='terminal'] .p-input,
+html[data-ui-theme='terminal'] .p-select,
+html[data-ui-theme='terminal'] .kv-row input,
+html[data-ui-theme='terminal'] .kv-row select,
+html[data-ui-theme='terminal'] .msg-bar select,
+html[data-ui-theme='terminal'] .log-select { height: 30px; }
+/* 信息行一律不参与收缩：高度是实测钉死的，被 flex 压 4px 就整块错位 */
+.set-row--kv, .set-row--kv-2, .set-row--kv-3 { flex: 0 0 auto; }
+
+.set-row { display: flex; align-items: center; gap: 6px; }
+.set-row > span { color: var(--as-text-3); font-size: 12px; line-height: 16px; flex: 0 0 auto; }
+.set-row > b { margin-left: auto; font-size: 12px; font-weight: 400; color: var(--as-text); text-align: right; }
+/* 滑块行固定 18 高（range 在 Chrome 里自带 22 的默认高度，会一层层把后面推下去）；
+   标签和数值也拉满 18（Qt 的 QLabel 被拉满行高，只写 16 会差 1px + 高度不等） */
+.set-row--slider { height: 18px; }
+.set-row--slider > span, .set-row--slider > b { align-self: stretch; display: flex; align-items: center; }
+.set-row--slider > b { justify-content: flex-end; }
+/* Chrome 的 13px 中日韩字比 Qt 窄 0.5px/字：这一对复选框宽度要跟桌面端一致（78） */
+.p-row--chk .check { letter-spacing: 0.5px; }
+/* 信息行：高度按桌面端实测钉死（值换行导致 32/48 的行），标签与值都拉满行高、内容垂直居中 */
+.set-row--kv { height: 16px; }
+.set-row--kv-2 { height: 32px; }
+.set-row--kv-3 { height: 48px; }
+.set-row--kv > span, .set-row--kv > b { align-self: stretch; display: flex; align-items: center; }
+.set-row--kv > b { justify-content: flex-end; overflow: hidden; }
+.set-row--btns { gap: 6px; }
+.set-row > input[type='range'] { flex: 1 1 auto; min-width: 0; }
+.set-row > b:last-child { min-width: 34px; }
+.set-box { padding: 9px; }
+/* 桌面端这几个按钮设了最小宽度（120/120/110 与 130/130） */
+.set-btn-120 { min-width: 120px; }
+.set-btn-110 { min-width: 110px; }
+.set-btn-130 { min-width: 130px; }
+/* 34 高的行里放 33 的按钮：Qt 是「顶部对齐」(224)，Chrome 居中会四舍五入成 225 */
+.p-row--top { align-items: flex-start; }
+
+/* QSlider：4px 槽 + 14×14 强调色滑块（2px 白边） */
+.set-row input[type='range'] {
+  appearance: none; -webkit-appearance: none;
+  height: 18px; background: transparent; cursor: pointer;
+}
+.set-row input[type='range']::-webkit-slider-runnable-track {
+  height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.10);
+}
+.set-row input[type='range']::-webkit-slider-thumb {
+  appearance: none; -webkit-appearance: none;
+  width: 14px; height: 14px; margin-top: -5px;
+  border-radius: 7px; background: var(--as-accent); border: 2px solid #FFFFFF;
+}
+.set-row input[type='range']:focus { outline: none; }
+
+/* 自定义 ToggleSwitch：左侧文字 + 右侧 40×20 药丸（开=强调色、关 #3A4354，白色 14px 圆点） */
+.toggle {
+  position: relative; display: flex; align-items: center; height: 24px;
+  color: var(--as-text-2); font-size: 13px; line-height: 24px; cursor: pointer;
+}
+.toggle > input { position: absolute; opacity: 0; width: 0; height: 0; }
+.toggle__pill {
+  margin-left: auto; margin-right: 8px; width: 40px; height: 20px; border-radius: 10px;
+  background: #3A4354; position: relative; transition: background 0.15s ease;
+}
+.toggle__pill::after {
+  content: ''; position: absolute; top: 3px; left: 3px;
+  width: 14px; height: 14px; border-radius: 7px; background: #FFFFFF;
+  transition: transform 0.15s ease;
+}
+.toggle > input:checked + .toggle__pill { background: var(--as-accent); }
+.toggle > input:checked + .toggle__pill::after { transform: translateX(20px); }
+.set-account { margin-top: 2px; }
+
+/* ===== 自动钉死（gen_pins.py 生成，勿手改；重跑会整段替换） ===== */
+html[data-page='wechat'][data-ui-theme='terminal'] .page > section:nth-child(4) > div:nth-child(2) > span:nth-child(1) { height: 14px; }
+html[data-page='wechat'][data-ui-theme='terminal'] .page > section:nth-child(4) > div:nth-child(2) > b:nth-child(2) { height: 14px; }
+html[data-page='wechat'][data-ui-theme='terminal'] .page > section:nth-child(4) > div:nth-child(3) > span:nth-child(1) { margin-top: -2px; }
+html[data-page='wechat'][data-ui-theme='terminal'] .page > section:nth-child(4) > p:nth-child(5) { height: 16px; }
+html[data-page='wechat'][data-ui-theme='terminal'] .page > section:nth-child(5) > p:nth-child(2) { height: 14px; }
+html[data-page='wechat'][data-ui-theme='terminal'] .page > section:nth-child(5) > button:nth-child(3) { margin-top: -2px; }
+html[data-page='qq'][data-ui-theme='glass'] .page > section:nth-child(5) > div:nth-child(2) > span:nth-child(1) { height: 35px; }
+html[data-page='qq'][data-ui-theme='glass'] .page > section:nth-child(5) > div:nth-child(4) > div:nth-child(1) > span:nth-child(1) { height: 35px; }
+html[data-page='qq'][data-ui-theme='glass'] .page > section:nth-child(5) > div:nth-child(4) > div:nth-child(2) > div:nth-child(2) > span:nth-child(1) { height: 34px; }
+html[data-page='qq'][data-ui-theme='glass'] .page > section:nth-child(5) > div:nth-child(4) > div:nth-child(2) > div:nth-child(3) > span:nth-child(1) { height: 34px; }
+html[data-page='qq'][data-ui-theme='glass'] .page > section:nth-child(5) > div:nth-child(4) > div:nth-child(3) > span:nth-child(1) { height: 34px; }
+html[data-page='qq'][data-ui-theme='swiss'] .page > section:nth-child(5) > div:nth-child(2) > span:nth-child(1) { height: 33px; }
+html[data-page='qq'][data-ui-theme='swiss'] .page > section:nth-child(5) > div:nth-child(2) > select:nth-child(2) { width: 264px; }
+html[data-page='qq'][data-ui-theme='swiss'] .page > section:nth-child(5) > div:nth-child(4) > div:nth-child(1) > span:nth-child(1) { height: 33px; }
+html[data-page='qq'][data-ui-theme='swiss'] .page > section:nth-child(5) > div:nth-child(4) > div:nth-child(1) > select:nth-child(2) { width: 242px; }
+html[data-page='qq'][data-ui-theme='swiss'] .page > section:nth-child(5) > div:nth-child(4) > div:nth-child(2) > div:nth-child(2) > span:nth-child(1) { height: 32px; }
+html[data-page='qq'][data-ui-theme='swiss'] .page > section:nth-child(5) > div:nth-child(4) > div:nth-child(2) > div:nth-child(3) > span:nth-child(1) { height: 32px; }
+html[data-page='qq'][data-ui-theme='swiss'] .page > section:nth-child(5) > div:nth-child(4) > div:nth-child(3) > span:nth-child(1) { height: 32px; }
+html[data-page='qq'][data-ui-theme='terminal'] .page > div:nth-child(4) > section:nth-child(1) > div:nth-child(3) > span:nth-child(1) { height: 14px; }
+html[data-page='qq'][data-ui-theme='terminal'] .page > div:nth-child(4) > section:nth-child(2) > p:nth-child(5) { height: 32px; }
+html[data-page='qq'][data-ui-theme='terminal'] .page > section:nth-child(5) > h2:nth-child(1) { margin-top: 2px; }
+html[data-page='qq'][data-ui-theme='terminal'] .page > section:nth-child(5) > div:nth-child(2) > span:nth-child(1) { height: 30px; }
+html[data-page='qq'][data-ui-theme='terminal'] .page > section:nth-child(5) > div:nth-child(2) > select:nth-child(2) { width: 260px; }
+html[data-page='qq'][data-ui-theme='terminal'] .page > section:nth-child(5) > p:nth-child(3) { height: 16px; }
+html[data-page='qq'][data-ui-theme='terminal'] .page > section:nth-child(5) > div:nth-child(4) > div:nth-child(1) > span:nth-child(1) { height: 30px; }
+html[data-page='qq'][data-ui-theme='terminal'] .page > section:nth-child(5) > div:nth-child(4) > div:nth-child(1) > select:nth-child(2) { width: 233px; }
+html[data-page='qq'][data-ui-theme='terminal'] .page > section:nth-child(5) > div:nth-child(4) > div:nth-child(2) > p:nth-child(1) { height: 48px; }
+html[data-page='qq'][data-ui-theme='terminal'] .page > section:nth-child(5) > div:nth-child(4) > div:nth-child(2) > div:nth-child(2) > span:nth-child(1) { height: 30px; }
+html[data-page='qq'][data-ui-theme='terminal'] .page > section:nth-child(5) > div:nth-child(4) > div:nth-child(2) > div:nth-child(3) > span:nth-child(1) { height: 30px; }
+html[data-page='qq'][data-ui-theme='terminal'] .page > section:nth-child(5) > div:nth-child(4) > div:nth-child(3) > span:nth-child(1) { height: 30px; }
+html[data-page='qq'][data-ui-theme='terminal'] .page > section:nth-child(5) > button:nth-child(5) { margin-top: 6px; }
+html[data-page='brain'][data-ui-theme='glass'] .page > section:nth-child(2) > div:nth-child(4) > span:nth-child(1) { height: 35px; }
+html[data-page='brain'][data-ui-theme='glass'] .page > section:nth-child(2) > div:nth-child(5) > span:nth-child(1) { height: 34px; }
+html[data-page='brain'][data-ui-theme='glass'] .page > section:nth-child(2) > div:nth-child(6) > span:nth-child(1) { height: 34px; }
+html[data-page='brain'][data-ui-theme='glass'] .page > section:nth-child(2) > div:nth-child(7) > span:nth-child(1) { height: 34px; }
+html[data-page='brain'][data-ui-theme='glass'] .page > section:nth-child(3) > div:nth-child(5) > span:nth-child(1) { height: 34px; }
+html[data-page='brain'][data-ui-theme='glass'] .page > section:nth-child(3) > div:nth-child(6) > span:nth-child(1) { height: 34px; }
+html[data-page='brain'][data-ui-theme='swiss'] .page > section:nth-child(2) > div:nth-child(3) > span:nth-child(1) { height: 20px; }
+html[data-page='brain'][data-ui-theme='swiss'] .page > section:nth-child(2) > div:nth-child(4) > span:nth-child(1) { height: 33px; }
+html[data-page='brain'][data-ui-theme='swiss'] .page > section:nth-child(2) > div:nth-child(5) > span:nth-child(1) { height: 32px; }
+html[data-page='brain'][data-ui-theme='swiss'] .page > section:nth-child(2) > div:nth-child(6) > span:nth-child(1) { height: 32px; }
+html[data-page='brain'][data-ui-theme='swiss'] .page > section:nth-child(2) > div:nth-child(7) > span:nth-child(1) { height: 32px; }
+html[data-page='brain'][data-ui-theme='swiss'] .page > section:nth-child(3) > div:nth-child(5) > span:nth-child(1) { height: 32px; }
+html[data-page='brain'][data-ui-theme='swiss'] .page > section:nth-child(3) > div:nth-child(6) > span:nth-child(1) { height: 32px; }
+html[data-page='brain'][data-ui-theme='swiss'] .page > div:nth-child(4) > div:nth-child(1) { height: 18px; }
+html[data-page='brain'][data-ui-theme='swiss'] .page > div:nth-child(4) > div:nth-child(2) { height: 18px; }
+html[data-page='brain'][data-ui-theme='terminal'] .page > section:nth-child(2) > p:nth-child(2) { height: 16px; }
+html[data-page='brain'][data-ui-theme='terminal'] .page > section:nth-child(2) > div:nth-child(3) > span:nth-child(1) { height: 17px; }
+html[data-page='brain'][data-ui-theme='terminal'] .page > section:nth-child(2) > div:nth-child(3) > label:nth-child(3) { width: 49px; }
+html[data-page='brain'][data-ui-theme='terminal'] .page > section:nth-child(2) > div:nth-child(4) > span:nth-child(1) { height: 30px; }
+html[data-page='brain'][data-ui-theme='terminal'] .page > section:nth-child(2) > div:nth-child(5) > span:nth-child(1) { height: 30px; }
+html[data-page='brain'][data-ui-theme='terminal'] .page > section:nth-child(2) > div:nth-child(6) > span:nth-child(1) { height: 30px; }
+html[data-page='brain'][data-ui-theme='terminal'] .page > section:nth-child(2) > div:nth-child(7) > span:nth-child(1) { height: 30px; }
+html[data-page='brain'][data-ui-theme='terminal'] .page > section:nth-child(3) > p:nth-child(2) { height: 16px; }
+html[data-page='brain'][data-ui-theme='terminal'] .page > section:nth-child(3) > div:nth-child(5) > span:nth-child(1) { height: 30px; }
+html[data-page='brain'][data-ui-theme='terminal'] .page > section:nth-child(3) > div:nth-child(6) > span:nth-child(1) { height: 30px; }
+html[data-page='brain'][data-ui-theme='terminal'] .page > div:nth-child(4) > div:nth-child(1) { width: 279px; }
+html[data-page='brain'][data-ui-theme='terminal'] .page > div:nth-child(4) > div:nth-child(2) { width: 279px; }
+html[data-page='messages'][data-ui-theme='glass'] .page > div:nth-child(2) > span:nth-child(1) { height: 35px; }
+html[data-page='messages'][data-ui-theme='swiss'] .page > div:nth-child(2) > span:nth-child(1) { height: 35px; }
+html[data-page='messages'][data-ui-theme='terminal'] .page > div:nth-child(2) > span:nth-child(1) { height: 30px; }
+html[data-page='messages'][data-ui-theme='terminal'] .page > div:nth-child(4) > div:nth-child(1) { width: 137px; }
+html[data-page='messages'][data-ui-theme='terminal'] .page > div:nth-child(4) > div:nth-child(2) { width: 137px; }
+html[data-page='plugins'][data-ui-theme='glass'] .page > div:nth-child(2) > section:nth-child(1) > div:nth-child(3) > span:nth-child(1) { height: 35px; }
+html[data-page='plugins'][data-ui-theme='swiss'] .page > div:nth-child(2) > section:nth-child(1) > div:nth-child(3) > span:nth-child(1) { height: 35px; }
+html[data-page='plugins'][data-ui-theme='terminal'] .page > div:nth-child(2) > section:nth-child(1) > p:nth-child(2) { height: 32px; }
+html[data-page='plugins'][data-ui-theme='terminal'] .page > div:nth-child(2) > section:nth-child(1) > div:nth-child(3) > span:nth-child(1) { height: 30px; }
+html[data-page='plugins'][data-ui-theme='terminal'] .page > div:nth-child(2) > section:nth-child(1) > p:nth-child(6) { height: 16px; }
+html[data-page='plugins'][data-ui-theme='terminal'] .page > div:nth-child(2) > section:nth-child(1) > p:nth-child(8) { height: 16px; }
+html[data-page='plugins'][data-ui-theme='terminal'] .page > div:nth-child(2) > section:nth-child(1) > p:nth-child(10) { height: 16px; }
+html[data-page='plugins'][data-ui-theme='terminal'] .page > div:nth-child(2) > section:nth-child(2) > p:nth-child(2) { height: 16px; }
+html[data-page='logs'][data-ui-theme='glass'] .page > section:nth-child(2) > div:nth-child(1) > span:nth-child(1) { height: 35px; }
+html[data-page='logs'][data-ui-theme='glass'] .page > section:nth-child(2) > div:nth-child(1) > span:nth-child(3) { height: 35px; }
+html[data-page='logs'][data-ui-theme='swiss'] .page > section:nth-child(2) > div:nth-child(1) > span:nth-child(1) { height: 35px; }
+html[data-page='logs'][data-ui-theme='swiss'] .page > section:nth-child(2) > div:nth-child(1) > span:nth-child(3) { height: 35px; }
+html[data-page='logs'][data-ui-theme='terminal'] .page > section:nth-child(2) > div:nth-child(1) > span:nth-child(1) { height: 30px; }
+html[data-page='logs'][data-ui-theme='terminal'] .page > section:nth-child(2) > div:nth-child(1) > span:nth-child(3) { height: 30px; }
+html[data-page='deps'][data-ui-theme='terminal'] .page > section:nth-child(2) > p:nth-child(1) { height: 17px; }
+html[data-page='deps'][data-ui-theme='terminal'] .page > section:nth-child(2) > p:nth-child(2) { height: 16px; }
+html[data-page='settings'][data-ui-theme='glass'] .page > div:nth-child(2) > div:nth-child(1) > section:nth-child(1) > div:nth-child(3) > span:nth-child(1) { height: 32px; }
+html[data-page='settings'][data-ui-theme='glass'] .page > div:nth-child(2) > div:nth-child(1) > section:nth-child(1) > div:nth-child(6) > span:nth-child(1) { height: 32px; }
+html[data-page='settings'][data-ui-theme='glass'] .page > div:nth-child(2) > div:nth-child(1) > section:nth-child(1) > div:nth-child(7) > span:nth-child(1) { height: 48px; }
+html[data-page='settings'][data-ui-theme='glass'] .page > div:nth-child(2) > section:nth-child(2) > div:nth-child(10) > span:nth-child(1) { height: 35px; }
+html[data-page='settings'][data-ui-theme='glass'] .page > div:nth-child(2) > section:nth-child(2) > div:nth-child(11) > div:nth-child(1) > span:nth-child(1) { height: 35px; }
+html[data-page='settings'][data-ui-theme='glass'] .page > div:nth-child(2) > section:nth-child(2) > div:nth-child(12) > div:nth-child(1) > span:nth-child(1) { height: 35px; }
+html[data-page='settings'][data-ui-theme='swiss'] .page > div:nth-child(2) > div:nth-child(1) > section:nth-child(1) > div:nth-child(3) > span:nth-child(1) { height: 32px; }
+html[data-page='settings'][data-ui-theme='swiss'] .page > div:nth-child(2) > div:nth-child(1) > section:nth-child(1) > div:nth-child(6) > span:nth-child(1) { height: 32px; }
+html[data-page='settings'][data-ui-theme='swiss'] .page > div:nth-child(2) > div:nth-child(1) > section:nth-child(1) > div:nth-child(7) > span:nth-child(1) { height: 48px; }
+html[data-page='settings'][data-ui-theme='swiss'] .page > div:nth-child(2) > section:nth-child(2) > div:nth-child(5) > label:nth-child(1) { width: 74px; }
+html[data-page='settings'][data-ui-theme='swiss'] .page > div:nth-child(2) > section:nth-child(2) > div:nth-child(5) > label:nth-child(2) { width: 74px; }
+html[data-page='settings'][data-ui-theme='swiss'] .page > div:nth-child(2) > section:nth-child(2) > div:nth-child(10) > span:nth-child(1) { height: 33px; }
+html[data-page='settings'][data-ui-theme='terminal'] .page > div:nth-child(2) > div:nth-child(1) > section:nth-child(1) > div:nth-child(3) > span:nth-child(1) { height: 28px; }
+html[data-page='settings'][data-ui-theme='terminal'] .page > div:nth-child(2) > div:nth-child(1) > section:nth-child(1) > div:nth-child(6) > span:nth-child(1) { height: 28px; }
+html[data-page='settings'][data-ui-theme='terminal'] .page > div:nth-child(2) > div:nth-child(1) > section:nth-child(1) > div:nth-child(7) > span:nth-child(1) { height: 28px; }
+html[data-page='settings'][data-ui-theme='terminal'] .page > div:nth-child(2) > div:nth-child(1) > section:nth-child(1) > div:nth-child(17) > button:nth-child(1) { height: 32px; }
+html[data-page='settings'][data-ui-theme='terminal'] .page > div:nth-child(2) > div:nth-child(1) > section:nth-child(2) > p:nth-child(2) { height: 32px; }
+html[data-page='settings'][data-ui-theme='terminal'] .page > div:nth-child(2) > div:nth-child(1) > section:nth-child(2) > label:nth-child(3) { margin-top: 2px; }
+html[data-page='settings'][data-ui-theme='terminal'] .page > div:nth-child(2) > div:nth-child(1) > section:nth-child(3) > p:nth-child(2) { height: 16px; }
+html[data-page='settings'][data-ui-theme='terminal'] .page > div:nth-child(2) > section:nth-child(2) > p:nth-child(2) { height: 16px; }
+html[data-page='settings'][data-ui-theme='terminal'] .page > div:nth-child(2) > section:nth-child(2) > div:nth-child(5) > label:nth-child(1) { width: 73px; }
+html[data-page='settings'][data-ui-theme='terminal'] .page > div:nth-child(2) > section:nth-child(2) > div:nth-child(5) > label:nth-child(2) { width: 73px; }
+html[data-page='settings'][data-ui-theme='terminal'] .page > div:nth-child(2) > section:nth-child(2) > div:nth-child(10) > span:nth-child(1) { height: 30px; }
+html[data-page='home'][data-ui-theme='glass'] .page > div:nth-child(2) > div:nth-child(3) > section:nth-child(2) > div:nth-child(2) > div:nth-child(1) { width: 234px; }
+html[data-page='home'][data-ui-theme='glass'] .page > div:nth-child(2) > div:nth-child(3) > section:nth-child(2) > div:nth-child(2) > div:nth-child(2) { height: 32px; width: 234px; }
+html[data-page='home'][data-ui-theme='swiss'] .page > div:nth-child(2) > div:nth-child(3) > section:nth-child(2) > div:nth-child(2) > div:nth-child(1) { width: 234px; }
+html[data-page='home'][data-ui-theme='swiss'] .page > div:nth-child(2) > div:nth-child(3) > section:nth-child(2) > div:nth-child(2) > div:nth-child(2) { height: 32px; width: 234px; }
+html[data-page='home'][data-ui-theme='terminal'] .page > div:nth-child(2) > div:nth-child(1) > section:nth-child(2) > p:nth-child(2) { height: 32px; }
+html[data-page='home'][data-ui-theme='terminal'] .page > div:nth-child(2) > div:nth-child(1) > section:nth-child(2) > div:nth-child(3) > button:nth-child(1) { margin-top: 2px; }
+html[data-page='home'][data-ui-theme='terminal'] .page > div:nth-child(2) > div:nth-child(3) > section:nth-child(2) > div:nth-child(2) > div:nth-child(1) { width: 272px; margin-top: -8px; }
+html[data-page='home'][data-ui-theme='terminal'] .page > div:nth-child(2) > div:nth-child(3) > section:nth-child(2) > div:nth-child(2) > div:nth-child(2) { height: 32px; width: 272px; }
+
+/* ===== 自动求解（web_solve.js 生成，勿手改；重跑 solve_gen.py 会整段替换） ===== */
+html[data-page='wechat'][data-ui-theme='terminal'] .page > section:nth-child(5) > button:nth-child(3) { position: relative; top: 2px; }
+html[data-page='qq'][data-ui-theme='terminal'] .page > div:nth-child(4) > section:nth-child(1) > div:nth-child(4) > span:nth-child(1) { position: relative; top: -2px; }
+html[data-page='qq'][data-ui-theme='terminal'] .page > div:nth-child(4) > section:nth-child(1) > div:nth-child(4) > b:nth-child(2) { position: relative; top: -2px; }
+html[data-page='qq'][data-ui-theme='terminal'] .page > section:nth-child(5) > h2:nth-child(1) { position: relative; top: -2px; }
+html[data-page='qq'][data-ui-theme='terminal'] .page > section:nth-child(5) > div:nth-child(2) > span:nth-child(1) { position: relative; top: -2px; }
+html[data-page='qq'][data-ui-theme='terminal'] .page > section:nth-child(5) > div:nth-child(2) > select:nth-child(2) { position: relative; top: -2px; }
+html[data-page='qq'][data-ui-theme='terminal'] .page > section:nth-child(5) > p:nth-child(3) { position: relative; top: -2px; }
+html[data-page='qq'][data-ui-theme='terminal'] .page > section:nth-child(5) > div:nth-child(4) > div:nth-child(1) > span:nth-child(1) { position: relative; top: -2px; }
+html[data-page='qq'][data-ui-theme='terminal'] .page > section:nth-child(5) > div:nth-child(4) > div:nth-child(1) > select:nth-child(2) { position: relative; top: -2px; }
+html[data-page='qq'][data-ui-theme='terminal'] .page > section:nth-child(5) > div:nth-child(4) > div:nth-child(2) > p:nth-child(1) { position: relative; top: -2px; }
+html[data-page='qq'][data-ui-theme='terminal'] .page > section:nth-child(5) > div:nth-child(4) > div:nth-child(2) > div:nth-child(2) > span:nth-child(1) { position: relative; top: -2px; }
+html[data-page='qq'][data-ui-theme='terminal'] .page > section:nth-child(5) > div:nth-child(4) > div:nth-child(2) > div:nth-child(3) > span:nth-child(1) { position: relative; top: -2px; }
+html[data-page='qq'][data-ui-theme='terminal'] .page > section:nth-child(5) > div:nth-child(4) > div:nth-child(2) > div:nth-child(4) > button:nth-child(2) { position: relative; top: -2px; }
+html[data-page='qq'][data-ui-theme='terminal'] .page > section:nth-child(5) > div:nth-child(4) > div:nth-child(3) > span:nth-child(1) { position: relative; top: -2px; }
+html[data-page='qq'][data-ui-theme='terminal'] .page > section:nth-child(5) > button:nth-child(5) { position: relative; top: -8px; }
+html[data-page='qq'][data-ui-theme='terminal'] .page > section:nth-child(6) > h2:nth-child(1) { position: relative; top: -8px; }
+html[data-page='brain'][data-ui-theme='swiss'] .page > div:nth-child(4) > div:nth-child(1) { position: relative; top: 2px; }
+html[data-page='brain'][data-ui-theme='swiss'] .page > div:nth-child(4) > div:nth-child(2) { position: relative; top: 2px; }
+html[data-page='brain'][data-ui-theme='terminal'] .page > div:nth-child(4) > div:nth-child(1) { position: relative; top: -2px; }
+html[data-page='brain'][data-ui-theme='terminal'] .page > div:nth-child(4) > div:nth-child(2) { position: relative; top: -2px; }
+html[data-page='settings'][data-ui-theme='glass'] .page > div:nth-child(2) > div:nth-child(1) > section:nth-child(1) > div:nth-child(17) > button:nth-child(1) { position: relative; left: 270px; }
+html[data-page='settings'][data-ui-theme='swiss'] .page > div:nth-child(2) > div:nth-child(1) > section:nth-child(1) > div:nth-child(17) > button:nth-child(1) { position: relative; left: 274px; }
+html[data-page='settings'][data-ui-theme='swiss'] .page > div:nth-child(2) > section:nth-child(2) > button:nth-child(12) { position: relative; top: -3px; }
+html[data-page='settings'][data-ui-theme='terminal'] .page > div:nth-child(2) > div:nth-child(1) > section:nth-child(1) > div:nth-child(17) > button:nth-child(1) { position: relative; top: 3px; left: 283px; }
+html[data-page='settings'][data-ui-theme='terminal'] .page > div:nth-child(2) > div:nth-child(1) > section:nth-child(2) > p:nth-child(2) { height: 32px; flex-shrink: 0; }
+html[data-page='settings'][data-ui-theme='terminal'] .page > div:nth-child(2) > div:nth-child(1) > section:nth-child(2) > label:nth-child(3) { position: relative; top: -2px; }
+html[data-page='home'][data-ui-theme='terminal'] .page > div:nth-child(2) > div:nth-child(1) > section:nth-child(2) > div:nth-child(3) > button:nth-child(1) { position: relative; top: -2px; }
+html[data-page='home'][data-ui-theme='terminal'] .page > div:nth-child(2) > div:nth-child(3) > section:nth-child(2) > div:nth-child(2) > div:nth-child(1) { position: relative; top: 4px; }
+html[data-page='home'][data-ui-theme='terminal'] .page > div:nth-child(2) > div:nth-child(3) > section:nth-child(2) > div:nth-child(2) > div:nth-child(2) { position: relative; top: 4px; }
+html[data-page='wechat'][data-ui-theme='glass'] .page > section:nth-child(4) > div:nth-child(7) > button:nth-child(1) { position: relative; top: -42px; }
+html[data-page='wechat'][data-ui-theme='glass'] .page > section:nth-child(4) > div:nth-child(7) > button:nth-child(2) { position: relative; top: -42px; }
+html[data-page='wechat'][data-ui-theme='glass'] .page > section:nth-child(4) > div:nth-child(7) > button:nth-child(3) { position: relative; top: -42px; }
+html[data-page='wechat'][data-ui-theme='glass'] .page > section:nth-child(4) > div:nth-child(7) > button:nth-child(4) { position: relative; top: -42px; }
+html[data-page='wechat'][data-ui-theme='glass'] .page > section:nth-child(4) > div:nth-child(7) > button:nth-child(5) { position: relative; top: -42px; }
+html[data-page='wechat'][data-ui-theme='glass'] .page > section:nth-child(5) > h2:nth-child(1) { position: relative; top: -42px; }
+html[data-page='wechat'][data-ui-theme='glass'] .page > section:nth-child(5) > p:nth-child(2) { position: relative; top: -42px; }
+html[data-page='wechat'][data-ui-theme='glass'] .page > section:nth-child(5) > button:nth-child(3) { position: relative; top: -42px; }
+html[data-page='wechat'][data-ui-theme='swiss'] .page > section:nth-child(4) > div:nth-child(7) > button:nth-child(1) { position: relative; top: -43px; }
+html[data-page='wechat'][data-ui-theme='swiss'] .page > section:nth-child(4) > div:nth-child(7) > button:nth-child(2) { position: relative; top: -43px; }
+html[data-page='wechat'][data-ui-theme='swiss'] .page > section:nth-child(4) > div:nth-child(7) > button:nth-child(3) { position: relative; top: -43px; }
+html[data-page='wechat'][data-ui-theme='swiss'] .page > section:nth-child(4) > div:nth-child(7) > button:nth-child(4) { position: relative; top: -43px; }
+html[data-page='wechat'][data-ui-theme='swiss'] .page > section:nth-child(4) > div:nth-child(7) > button:nth-child(5) { position: relative; top: -43px; }
+html[data-page='wechat'][data-ui-theme='swiss'] .page > section:nth-child(5) > h2:nth-child(1) { position: relative; top: -43px; }
+html[data-page='wechat'][data-ui-theme='swiss'] .page > section:nth-child(5) > p:nth-child(2) { position: relative; top: -43px; }
+html[data-page='wechat'][data-ui-theme='swiss'] .page > section:nth-child(5) > button:nth-child(3) { position: relative; top: -43px; }
+html[data-page='wechat'][data-ui-theme='terminal'] .page > section:nth-child(4) > div:nth-child(7) > button:nth-child(1) { position: relative; top: -38px; }
+html[data-page='wechat'][data-ui-theme='terminal'] .page > section:nth-child(4) > div:nth-child(7) > button:nth-child(2) { position: relative; top: -38px; }
+html[data-page='wechat'][data-ui-theme='terminal'] .page > section:nth-child(4) > div:nth-child(7) > button:nth-child(3) { position: relative; top: -38px; }
+html[data-page='wechat'][data-ui-theme='terminal'] .page > section:nth-child(4) > div:nth-child(7) > button:nth-child(4) { position: relative; top: -38px; }
+html[data-page='wechat'][data-ui-theme='terminal'] .page > section:nth-child(4) > div:nth-child(7) > button:nth-child(5) { position: relative; top: -38px; }
+html[data-page='wechat'][data-ui-theme='terminal'] .page > section:nth-child(5) > h2:nth-child(1) { position: relative; top: -38px; }
+html[data-page='wechat'][data-ui-theme='terminal'] .page > section:nth-child(5) > p:nth-child(2) { position: relative; top: -38px; }
+html[data-page='wechat'][data-ui-theme='terminal'] .page > section:nth-child(5) > button:nth-child(3) { top: -36px; }
+
+/* ===== 手工偏差（刻意不跟 Qt 一致的地方；gen_pins、solve_gen 都原样保留这一段） ===== */
+/* 1) 复选框文字不许换行。Qt 的 QCheckBox 永远是单行；Web 端把 label 宽度钉死之后
+      （深空终端的「自动播放 / 循环播放」label 是 73px），留给文字的空间只剩 49px，
+      Chrome 的 12px 度量比 Qt 宽一点，于是折成两行、盖住上下两行。 */
+html[data-ui-theme] .check > span { white-space: nowrap; }
+
+/* 2) 「设置 → 外观」三条滑杆行对齐。Qt 原版把「UI 不透明度」那一行嵌在一个 9px 内边距的
+      框里，所以它的标签、轨道、数值都比上下的「遮罩强度 / 视频亮度」整体右移 9px，
+      三个数值（0.68 / 70% / 0）也不在一条竖线上。这里统一拉回同一栅格：
+        · 框里的那一行用负 margin 抵掉 9px 缩进（标签左边缘三条都落在 853）；
+        · 上下的行给轨道补 22px 左边距（它们标签窄 22px），三条轨道起点因此齐平；
+        · 数值列本来就右对齐，行宽一致后自然成一条竖线。
+      做法上不动标签盒子宽度，这样对表只丢「框里那行的标签 + 数值」两条。
+      ⚠ 这是主动偏离 Qt：对表时「设置」页会因此固定有 2 条差异。
+         要恢复成跟 Qt 完全一致，删掉下面三行即可。 */
+html[data-page='settings'] .set-box > .set-row--slider { margin-left: -9px !important; margin-right: -9px !important; }
+html[data-page='settings'] .set-row--slider > input[type='range'] { margin-left: 22px !important; }
+html[data-page='settings'] .set-box > .set-row--slider > input[type='range'] { margin-left: 0 !important; }
+
+
+/* ===== 插件列表的「详情」按钮 + 详情页参数表单（2026-09 加） ===== */
+.p-item-row { display: flex; align-items: stretch; gap: 6px; }
+.p-item-row > .p-item { flex: 1 1 auto; min-width: 0; }
+.p-item__more { flex: 0 0 auto; padding: 0 10px; }
+.param-row { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+.param-row > span { flex: 0 0 220px; }
+.param-row > input { flex: 1 1 auto; }
+.param-row > b { flex: 0 0 auto; color: var(--as-text-3); font-weight: 400; font-size: 12px; }
+.param-feature { color: var(--as-text-2); font-size: 12.5px; }
+
+/* ===== 窄屏适配（追加；此前全站唯一的 @media 作用在从未使用的 .grid2 上）=====
+   桌面端的固定高度/多列布局在手机上会裁内容或横向溢出，这里统一放开。 */
+@media (max-width: 860px) {
+  .set-info, .set-info--tall, [class*="set-info"] { height: auto !important; max-height: none !important; overflow: visible !important; }
+  .pl-row, .home-row, .home-row--mid, .mcp-row, .dep-row { grid-template-columns: 1fr !important; flex-direction: column !important; }
+  .p-list, .p-list--134, .recent-list { max-height: 62vh !important; }
+  .stat-row b, .stat-row span { white-space: normal !important; word-break: break-all; }
+  .page-head h1 { font-size: clamp(18px, 5vw, 24px); }
+  .btn, .btn--block { width: 100%; }
+  .btn-row, .p-row, .pkg__foot { flex-wrap: wrap !important; }
+  .card, .panel { padding: 14px 12px !important; }
+  img, .qr-box img, .pkg__ava { max-width: 100%; height: auto; }
+}
+@media (max-width: 520px) {
+  .nav .links { display: none; }
+  .stat-rows { grid-template-columns: 1fr !important; }
+}
+
+/* ==== UI v2 新页面专用（2026-09 追加；只作用于 data-page 为 v2 的页面，
+   不要与上方 solver 自动钉死区混用）====
+   目的：满足设计规范「组外间距 ≥ 组内间距 × 1.5」——卡片之间 24px，卡片内 12px。 */
+[data-page='home-v2'] .card,
+[data-page='access-v2'] .card,
+[data-page='services-v2'] .card,
+[data-page='settings-v2'] .card { margin-bottom: 24px; }
+[data-page='access-v2'] .card + .card { margin-top: 0; }
+[data-page='access-v2'] details { margin-top: 12px; }
+
+/* ==== 以下为 2026-09 图标与首页/接入页细化（同样只作用于 v2 页，上面一段一个字节都没动） ==== */
+
+/* —— 图标统一规格（App.jsx 的 Icon 组件）：inline svg 默认按文字基线对齐，放进按钮里会看起来
+   偏下 1–2px；统一成块级 + flex 里 align-self 居中，尺寸只有 18（侧栏/内容）/16（顶栏）两档。 */
+html[data-page] .icon { display: block; align-self: center; flex: 0 0 auto; }
+
+/* —— 首页：主操作区「文字块 → 按钮组」16px（卡片自身 gap 6 + 这里 10），按钮组内部 10px；
+   分区块之间 24px（page gap 14 + margin-top 10）；正文用两列网格，组内 16px。 */
+[data-page='home-v2'] .page > .card { margin-bottom: 0; }
+[data-page='home-v2'] .hp-act { margin-top: 10px; }
+[data-page='home-v2'] .hp-act__btns {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 10px;
+}
+[data-page='home-v2'] .hp-health__head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+[data-page='home-v2'] .hp-health__note { color: var(--as-text-3); font-size: 12px; line-height: 16px; }
+[data-page='home-v2'] .hp-health__row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+[data-page='home-v2'] .hp-health__list {
+  display: flex; flex-direction: column; gap: 4px;
+  margin: 0; padding-left: 16px;
+  color: var(--as-text-2); font-size: 12px; line-height: 18px;
+}
+[data-page='home-v2'] .hp-grid {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px; margin-top: 10px;
+}
+[data-page='home-v2'] .hp-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+[data-page='home-v2'] .hp-col > .card:last-child { flex: 1 1 auto; }
+[data-page='home-v2'] .hp-grid .card { margin-bottom: 0; min-width: 0; }
+[data-page='home-v2'] .hp-nowrap {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 64%;
+}
+/* 最近消息：RecentMessages 那套类名原来没有样式（渲染成浏览器默认按钮），这里补齐 */
+[data-page='home-v2'] .recent-item {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  padding: 7px 4px; border: 0; border-bottom: 1px solid var(--as-border-light);
+  background: transparent; color: var(--as-text);
+  font: inherit; font-size: 13px; line-height: 18px; text-align: left; cursor: pointer;
+}
+[data-page='home-v2'] .recent-item:last-child { border-bottom: 0; }
+[data-page='home-v2'] .recent-item:hover { background: var(--as-panel-strong); }
+[data-page='home-v2'] .recent-item__t {
+  flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+[data-page='home-v2'] .recent-item__m { flex: 0 0 auto; color: var(--as-text-3); font-size: 12px; }
+/* 第三级动作做成链接样式（规范：危险/边缘动作不用实心大按钮） */
+[data-page='home-v2'] .hp-linkrow { display: flex; justify-content: flex-end; }
+[data-page='home-v2'] .hp-link {
+  padding: 0; border: 0; background: transparent; cursor: pointer;
+  color: var(--as-accent); font: inherit; font-size: 12.5px;
+}
+[data-page='home-v2'] .hp-link:hover { opacity: 0.8; text-decoration: underline; }
+/* 折叠区：只放运维入口、路径细节与原始数据 */
+[data-page='home-v2'] .fold {
+  margin-top: 10px; padding: 12px 16px;
+  background: var(--as-panel); border: 1px solid var(--as-border-light);
+  border-radius: var(--as-radius);
+}
+[data-page='home-v2'] .fold__summary {
+  cursor: pointer; color: var(--as-text-2); font-size: 13px; font-weight: 600; line-height: 20px;
+}
+[data-page='home-v2'] .fold__body { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
+[data-page='home-v2'] .fold .card { margin-bottom: 0; }
+@media (max-width: 900px) {
+  [data-page='home-v2'] .hp-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* —— 接入页：两个功能分组（组内 14px、组间 24px = page gap 14 + 10）。
+   通道行 = 图标 + 信息列(flex:1) + 固定宽度操作槽(margin-left:auto)：
+   状态徽标挪进信息列后，「配置 ›」的横向位置对所有通道都落在同一条竖线上。 */
+[data-page='access-v2'] .chan-grp { display: flex; flex-direction: column; gap: 14px; }
+[data-page='access-v2'] .chan-grp--plan { margin-top: 10px; }
+[data-page='access-v2'] .chan-grp__title {
+  color: var(--as-text-3); font-size: 12px; line-height: 16px; font-weight: 600;
+}
+[data-page='access-v2'] .chan__item { display: flex; flex-direction: column; gap: 14px; }
+[data-page='access-v2'] .chan-grp .chan { margin-bottom: 0; }
+[data-page='access-v2'] .chan {
+  display: flex; flex-direction: row; align-items: flex-start; gap: 14px;
+  padding: 14px 16px;
+}
+[data-page='access-v2'] .chan--closed { padding: 10px 16px; align-items: center; gap: 12px; }
+[data-page='access-v2'] .chan__icon {
+  flex: 0 0 auto; display: flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px;
+  border-radius: var(--as-radius-sm); background: var(--as-accent-soft); color: var(--as-text);
+}
+[data-page='access-v2'] .chan--closed .chan__icon { width: 28px; height: 28px; }
+[data-page='access-v2'] .chan__main {
+  flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 6px;
+}
+[data-page='access-v2'] .chan__head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+[data-page='access-v2'] .chan__name { color: var(--as-text); font-size: 15px; font-weight: 600; line-height: 20px; }
+[data-page='access-v2'] .chan__meta { color: var(--as-text-3); font-size: 12px; line-height: 16px; }
+[data-page='access-v2'] .chan__closed { color: var(--as-text-3); font-size: 12px; line-height: 16px; }
+[data-page='access-v2'] .chan__facts { display: flex; flex-direction: column; gap: 6px; margin-top: 2px; }
+[data-page='access-v2'] .chan__fact { display: flex; align-items: center; gap: 8px; min-width: 0; }
+[data-page='access-v2'] .chan__k { flex: 0 0 auto; color: var(--as-text-3); font-size: 12px; line-height: 16px; }
+[data-page='access-v2'] .chan__v {
+  flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--as-text-2); font-size: 12px; line-height: 16px;
+}
+[data-page='access-v2'] .chan__hint { margin: 0; color: var(--as-text-3); font-size: 12px; line-height: 16px; }
+[data-page='access-v2'] .chan__side {
+  flex: 0 0 auto; margin-left: auto; display: flex; align-items: flex-start;
+}
+[data-page='access-v2'] .chan__act { width: 84px; padding: 0; }
+[data-page='access-v2'] .chan__body { display: flex; flex-direction: column; gap: 14px; }
+[data-page='access-v2'] .chan__body .card { margin-bottom: 0; }
+@media (max-width: 720px) {
+  [data-page='access-v2'] .chan { flex-wrap: wrap; }
+  [data-page='access-v2'] .chan__side { margin-left: 0; }
+}
+
+/* ==== 2026-09 侧边栏排版统一（分组标题 / 导航项 / 账号入口）====
+   追加在既有 UI v2 块之后：只作用于 .sidebar-wrap（三套布局里侧栏只属于极光玻璃，
+   瑞士/深空那两套走 .topnav / .rail，不受影响），上方自动钉死区与既有规则一个字节都没动。
+   规范落地：字重只用 400/500 与 600；文字颜色只取主题变量（不写死色值）；
+   层级靠字重与颜色拉开，不靠字号；间距只用 8/10/16。
+
+   竖向栅格（全篇共用，别在各处再拍数字）：
+     --nav-pad-x  10px  行的左右内边距
+     --nav-icon   18px  图标唯一尺寸（图标规格同上：24 viewBox / stroke 1.5 / round / currentColor）
+     --nav-gap    10px  图标↔文字间距（规范 10–12）
+   → 行内文字起点 = 10 + 18 + 10 = 38px
+   → 分组标题没有图标，用 calc() 取同一个 38px：三组标题与所有导航项文字落在同一条竖线上。 */
+.sidebar-wrap {
+  --nav-pad-x: 10px;
+  --nav-icon: 18px;
+  --nav-gap: 10px;
+}
+
+/* 导航列表撑满剩余高度、自己在组内滚动（窄屏不再把整条侧栏顶出视口） */
+.sidebar-wrap .navgroups {
+  flex: 1 1 auto; min-height: 0;
+  display: flex; flex-direction: column; gap: 0;
+  overflow-y: auto; overflow-x: hidden;
+}
+.sidebar-wrap .navgrp { display: flex; flex-direction: column; }
+
+/* 分组标题：11px / 600 / letter-spacing .06em（小字加宽字距才不像漏排），
+   最低一档文字色 var(--as-text-3)（玻璃主题 5.5:1，仍 ≥4.5:1）；上下留白 16 / 8（8 的倍数）。 */
+.sidebar-wrap .navgrp__title {
+  margin: 16px 0 8px;
+  padding-left: calc(var(--nav-pad-x) + var(--nav-icon) + var(--nav-gap));
+  font-size: 11px; font-weight: 600; line-height: 16px; letter-spacing: 0.06em;
+  color: var(--as-text-3);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* 导航项：13px / 500 / 行高 1.4，未选中 = 次级色 var(--as-text-2)（8.9:1）；
+   行高 36（旧的 54 太松，「又小又散」的另一半就是行太高）。 */
+.sidebar-wrap .nav-item {
+  height: 36px; margin: 2px 0; padding: 0 var(--nav-pad-x);
+  gap: var(--nav-gap);
+  align-items: center;
+  font-size: 13px; font-weight: 500; line-height: 1.4;
+  color: var(--as-text-2);
+}
+.sidebar-wrap .nav-item > span {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* 图标唯一尺寸 18：JSX 已传 size={18}，这里再钉一次防止以后被改乱 */
+.sidebar-wrap .nav-item > svg,
+.sidebar-wrap .sidebar-account > svg {
+  flex: 0 0 var(--nav-icon); width: var(--nav-icon); height: var(--nav-icon);
+}
+
+/* 选中态：主色文字 var(--as-text) + 微弱高亮底 var(--as-accent-soft) + 600 字重
+   —— 文字颜色与字重同时变，不只靠背景色一个信号；aria-current="page" 已在 JSX 上。 */
+.sidebar-wrap .nav-item--on {
+  background: var(--as-accent-soft);
+  color: var(--as-text); font-weight: 600;
+}
+
+/* 账号入口：改成左对齐，图标落在与导航项同一条 10px 竖线上（原来是居中那套，跟下面的列表错位） */
+.sidebar-wrap .sidebar-account {
+  justify-content: flex-start;
+  gap: var(--nav-gap); padding: 0 var(--nav-pad-x);
+  font-size: 13px; font-weight: 500; line-height: 1.4;
+  color: var(--as-text);
+}
+
+/* ==== 2026-09 设置页 tabbar（外观 / 账号 / 高级）====
+   背景：全文件里 .tabbar / .tabbar__item 一条规则都没有，所以这三个 tab 一直长成浏览器
+   默认控件的样子（buttonface 亮底 + 2px outset 亮边框 + 系统字体），跟暗色玻璃主题不搭；
+   选中态也只是浏览器给的默认描边，完全没走主题强调色体系。这里补齐。
+   三套主题共用同一份规则、只取 --as-* 变量，不写死任何色值：
+     glass    → --as-border-light rgba(255,255,255,.08)（发丝线）/ --as-radius-sm 8px
+     swiss    → #D9D9D6 细线 / 0 圆角 / --as-text-2 #444（白底 9.6:1）
+     terminal → rgba(255,255,255,.10) 细线 / 4 圆角
+   规范：高 32、水平内边距 14、tab 之间 8、与下方内容 16、圆角用全局 --as-radius-sm。
+   「颜色不能是唯一信号」：选中同时动底色（accent-soft）+ 文字（--as-text）+ 字重
+   （400→600）三样；JSX 里的 aria-selected 另外给了读屏器一个非视觉信号。 */
+.tabbar {
+  display: flex; align-items: center; gap: 8px;
+  /* .page 自身是 flex gap 14，这里补 2 凑成规范要求的 16（同 hp-act / chan-grp--plan 的补偿写法） */
+  margin-bottom: 2px;
+}
+.tabbar__item {
+  display: inline-flex; align-items: center; justify-content: center;
+  height: 32px; padding: 0 14px;
+  border: 1px solid var(--as-border-light);
+  border-radius: var(--as-radius-sm);
+  background: transparent;
+  color: var(--as-text-2);
+  /* font: inherit 必须有：<button> 默认不继承字体，不写这两个字就是系统 UI 字体 */
+  font: inherit; font-size: 13px; font-weight: 400; line-height: 17px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+/* hover 只给「极弱底色」var(--as-panel)，不给面板色：swiss 的面板就是 #FFFFFF，
+   在白底上再叠白等于没反馈，所以三套主题都靠细线加深 + 文字提到 --as-text 来示意，
+   跟选中态（accent-soft 实底 + 600）一眼能分开。 */
+.tabbar__item:hover {
+  background: var(--as-panel); border-color: var(--as-border-strong); color: var(--as-text);
+}
+.tabbar__item:focus-visible { outline: 2px solid var(--as-accent); outline-offset: 2px; }
+.tabbar__item--on {
+  background: var(--as-accent-soft); border-color: var(--as-accent-soft);
+  color: var(--as-text); font-weight: 600;
+}
+
+/* ==== 2026-09 侧栏分组标题（运行 / 能力 / 系统）最终形态 ====
+   原规则在文件上部，一个字节没动；这里同选择器、后出现，靠层叠覆盖三点：
+   1) 跟导航项明显拉开：标题是「标签」不是按钮 —— 11px / 600 / letter-spacing .08em /
+      var(--as-text-3)，无背景、无边框、无圆角；导航项仍是 13px / 500 / var(--as-text-2)。
+   2) 装饰取「方案 A」：标题后跟一条渐隐细线（1px、flex:1、左边距 8），把分组横向切开。
+      比方案 B 的小竖条更贴这套主题 —— 玻璃主题本来就是靠 1px 发丝线分层
+      （其余两套的 .topnav__sep / .railsep 同理）。
+      线色用 var(--as-border-light)：本仓库的「分隔线色」就是它，没有 --as-line 这个变量。
+   3) 不动「标题左边缘 = 导航项文字起点」这条约束：padding-left 还是原规则的
+      calc(--nav-pad-x 10 + --nav-icon 18 + --nav-gap 10) = 38px，装饰只往右长、不挤文字；
+      margin 保持 16px 0 8px（8 的倍数）。
+   被哪些布局用到：navgrp__title 只由 renderNav() 产出、只挂在 .sidebar-wrap 下，
+   而 .sidebar-wrap 只在极光玻璃显示（html[data-ui-theme='swiss'|'terminal'] .sidebar-wrap
+   都是 display:none）；瑞士走 .topnav、深空走 .rail，那两套是 flatMap 出来的平铺导航，
+   压根没有分组标题（分层靠 .topnav__sep / .railsep）。所以它实际只在玻璃主题可见 ——
+   但这里仍全部取 --as-* 变量，将来被另外两套复用也不会花。
+   已知取舍：display:flex 之后容器上的 text-overflow:ellipsis 不再生效（裸文本节点是匿名
+   flex item）；三个标题都是 2 个字，容器还有 overflow:hidden 兜底，不会溢出。 */
+.sidebar-wrap .navgrp__title {
+  display: flex; align-items: center;
+  letter-spacing: 0.08em;
+  background: none; border: 0; border-radius: 0;
+}
+.sidebar-wrap .navgrp__title::after {
+  content: ''; flex: 1 1 auto; min-width: 8px;
+  height: 1px; margin-left: 8px;
+  background: linear-gradient(90deg, var(--as-border-light), transparent);
+}
+
+/* ==== 2026-09 追加的补充规则（在文件末尾，前面的块未改动）====
+   背景：全站重排版后有 3 个类名在样式表里完全没有规则（DOM 落成浏览器默认控件：
+   buttonface 亮底 + 2px outset + 系统字体，暗色玻璃主题下非常突兀），
+   另有 1 处页面作用域漏配（规则永不命中）。这里一次补齐。
+   规范落地（astroswarm-ui-design）：只用 --as-* 变量 → 三套主题共用一份规则、不写死色值；
+   间距只用 8/12/16/24；组外间距 ≥ 组内 ×1.5；状态不只靠颜色（JSX 里已带文字）。
+
+   1) 全局管理页（ServicesPage）。PAGE_KEY 现在补上 services → data-page='services-v2'，
+      1164 行那条 [data-page='services-v2'] .card 才真正可达；
+      旧的 [data-page='services'] 那批钉死规则整体不命中（与 home-v2 / access-v2 同一做法）。
+      行结构 = 信息列(flex:1) + 动作槽(margin-left:auto)：状态徽标与动作按钮落在同一竖线上，
+      不再是上下堆叠（原来 .svc__side 的 margin-left:auto 设计意图一点没生效）。 */
+[data-page='services-v2'] .svc { gap: 0; }
+[data-page='services-v2'] .svc__row {
+  display: flex; align-items: center; gap: 16px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--as-border-light);
+}
+[data-page='services-v2'] .svc__row:first-child { padding-top: 2px; }
+[data-page='services-v2'] .svc__row:last-child { padding-bottom: 2px; border-bottom: 0; }
+[data-page='services-v2'] .svc__main {
+  flex: 1 1 auto; min-width: 0;
+  display: flex; flex-direction: column; gap: 4px;
+}
+[data-page='services-v2'] .svc__name {
+  color: var(--as-text); font-size: 14px; font-weight: 600; line-height: 20px;
+}
+[data-page='services-v2'] .svc__meta { color: var(--as-text-3); font-size: 12px; line-height: 16px; }
+[data-page='services-v2'] .svc__side {
+  flex: 0 0 auto; margin-left: auto;
+  display: flex; align-items: center; gap: 12px;
+}
+@media (max-width: 640px) {
+  [data-page='services-v2'] .svc__row { flex-wrap: wrap; }
+  [data-page='services-v2'] .svc__side { margin-left: 0; }
+}
+
+/* 2) 记忆时间线（MemoryTimeline）/ 本地知识库（KnowledgeBase）的条目与正文框。
+      这两个组件的类名一条规则都没有：条目渲染成浏览器默认按钮，textarea 无边框、非等宽。
+      写法照首页那份 .recent-item（1201 行）——但这里是 AI 大脑页（data-page='brain'），
+      所以不套 data-page 作用域，避免以后页面重排时又落空。
+      hover 用 --as-border-light 而不是 --as-panel-strong：瑞士主题的 panel 就是 #FFFFFF，
+      在白底上叠白等于没有反馈（三套主题下这层浅灰都是可见的）。 */
+.brain-item {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  padding: 7px 10px; border: 0; border-bottom: 1px solid var(--as-border-light);
+  background: transparent; color: var(--as-text);
+  font: inherit; font-size: 13px; line-height: 18px; text-align: left; cursor: pointer;
+}
+.brain-item:last-child { border-bottom: 0; }
+.brain-item:hover { background: var(--as-border-light); }
+/* 选中态：底色 + 字重一起变（「颜色不能是唯一信号」），不要只靠一个浅底 */
+.brain-item--on { background: var(--as-accent-soft); color: var(--as-text); font-weight: 600; }
+.brain-item__t {
+  flex: 1 1 auto; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.brain-item__m { flex: 0 0 auto; color: var(--as-text-3); font-size: 12px; }
+.brain-textarea {
+  display: block; box-sizing: border-box;
+  width: 100%; min-height: 96px;
+  padding: 8px 10px; resize: vertical;
+  border: 1px solid var(--as-border-light); border-radius: var(--as-radius-sm);
+  background: var(--as-panel-solid); color: var(--as-text);
+  font-family: var(--as-font-mono); font-size: 12.5px; line-height: 18px;
+}
+.brain-textarea:focus { outline: none; border-color: var(--as-accent); }
+.brain-textarea::placeholder { color: var(--as-text-3); }
+
+/* 3) 瑞士极简顶栏窄屏横向溢出。App.jsx 的注释（411 行）写着「窄屏由 .navflow 允许换行」，
+      但样式表里根本没有 .navflow —— .topnav 只有 flex:0 0 54px; height:54px，没有 flex-wrap，
+      9 个导航项 + 账号 + 2 条分隔线在窄窗口会横向溢出并被裁掉。
+      flex 必须一起放开：父级是纵向 flex，flex-basis 54px 会把换行后的内容顶出盒子。
+      分隔线是分组装饰不是信息，窄屏先让位（不然它自己占掉一整行）。 */
+.topnav.navflow { flex: 0 0 auto; flex-wrap: wrap; height: auto; min-height: 54px; }
+.topnav.navflow .topnav__item { height: auto; min-height: 54px; }
+.topnav.navflow .topnav__sep { align-self: center; }
+@media (max-width: 1100px) {
+  .topnav.navflow .topnav__sep { display: none; }
+}
+
+/* ==========================================================================
+   2026-09 追加的补充规则
+   --------------------------------------------------------------------------
+   规矩：这一段**只追加在文件末尾**，上面任何一段都没动 —— 尤其没动
+   「自动钉死（gen_pins.py）」「自动求解（web_solve.js）」那两段会整段重跑的规则。
+   每一条都只作用在新页名（*-v2 / messages），旧页名那批钉死规则原样保留。
+   ========================================================================== */
+
+/* 1) 设置页三张卡片带着 Qt 1:1 时代的钉死高度 + overflow:hidden（上面 846-848 行，
+      外加 html[data-ui-theme='swiss'|'terminal'] 那两批覆盖：114/176/882 等）。
+   新页签的 DOM 已经变了：
+     · .set-boot 现在装的是「开发者模式勾选框 + 小白模式开关 + 两段说明」，
+       176px 装不下 —— 最后一行会被 overflow:hidden 直接切掉；
+     · .set-ai 内容贴着 114px 的边界，勾选框有被切的风险（现在已改成只读状态行）；
+     · .set-appr 在外观页签里只剩单列，882px 会在卡片底部留一大块空白。
+   这里只对新的设置页（data-page='settings-v2'）放开高度与裁剪，改成按内容自适应。
+   旧页名 settings 的那批规则一条不动（Qt 版的固定高度需求留给桌面端）。 */
+[data-page='settings-v2'] .set-ai,
+[data-page='settings-v2'] .set-boot,
+[data-page='settings-v2'] .set-appr {
+  flex: 0 0 auto;
+  height: auto;
+  min-height: 0;
+  max-height: none;
+  overflow: visible;
+}
+
+/* 2) 三条滑杆对齐规则在上面的「手工偏差」区（1126-1128 行）写的是
+      html[data-page='settings']，而 PAGE_KEY 早把设置页改名成 settings-v2 ——
+      那三条从此永远不命中，外观页三个滑杆的「负边距抵掉 9px 缩进 + 轨道补 22px」
+      全部丢失。这里补一份 settings-v2 版本。
+      （上面那三条保持原样，等确认 settings 页名彻底不用了再一起清。）
+      做法改成「结构性对齐」而不是继续堆 magic number：
+        · .set-box 的 9px 内边距用负边距抵掉 → 三行的行首左边缘相同（实测都是 223）；
+        · 给标签一个统一的 min-width → 三条滑杆的轨道起点由结构保证相同，
+          不再依赖「标签窄 22px 所以补 22px」这种跟字体相关的假设
+          （实测那套补偿在新页名/新字体下只剩 6px 误差，还不如结构对齐稳）。 */
+[data-page='settings-v2'] .set-box > .set-row--slider {
+  margin-left: -9px !important;
+  margin-right: -9px !important;
+}
+[data-page='settings-v2'] .set-row--slider > span { min-width: 84px; }
+[data-page='settings-v2'] .set-row--slider > input[type='range'] { margin-left: 0 !important; }
+
+/* 3) 设置页三个页签的外层容器 .tabpane 一直没有规则。
+      间距本来由 [data-page='settings-v2'] .card{margin-bottom:24px} 兜住，这里只补
+      最小的一条：让页签内部是稳定的纵向流、最后一个卡片不再多留 24px 页尾空白，
+      折叠区里的卡片也不要再多加一层外边距。 */
+[data-page='settings-v2'] .tabpane { display: flex; flex-direction: column; min-width: 0; }
+[data-page='settings-v2'] .tabpane > .card:last-child { margin-bottom: 0; }
+[data-page='settings-v2'] .fold__body .card { margin-bottom: 0; }
+
+/* 4) 消息中心接线后的行结构。.msg-item 自带 white-space: pre-line（旧版是把一整行
+      带 \n 的字符串塞进去的），换成「会话名 + 元信息 / 最后一句」两层 DOM 后要恢复普通换行。 */
+[data-page='messages'] .msg-item { white-space: normal; }
+[data-page='messages'] .msg-item__head {
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+}
+[data-page='messages'] .msg-item__who { color: var(--as-text); font-weight: 600; }
+[data-page='messages'] .msg-item__meta {
+  margin-left: auto; color: var(--as-text-3); font-size: 11.5px; line-height: 16px;
+}
+[data-page='messages'] .msg-item__last {
+  margin-top: 2px;
+  color: var(--as-text-2); font-size: 12px; line-height: 16px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* 过滤行右侧的「共 N 个会话」计数：撑到最右，和左侧的「平台/刷新」拉开 */
+.msg-bar__stat { margin-left: auto; color: var(--as-text-3); font-size: 12px; line-height: 16px; }
+
+/* 5) 日志页的提示行（未登录 / 流断开 / 筛选无匹配）：用一条左边线和黑框日志区分开。
+   不引新颜色，三套主题都用 --as-border-light。 */
+.log-note { padding-left: 8px; border-left: 2px solid var(--as-border-light); }
+
+/* 6) 插件管理底部「安装任务」原来是一张只有标题、钉死 48px 的空卡片。
+   现在里面填了真实的任务状态文字，高度跟着内容走（最小保持原来的 48px）。 */
+[data-page='plugins-v2'] .pl-tasks { height: auto; min-height: 48px; }
