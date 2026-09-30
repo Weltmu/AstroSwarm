@@ -24,6 +24,7 @@ import zipfile
 from pathlib import Path
 
 from . import ai_config
+from . import offline_bundle as offline
 from .net import download_with_mirrors
 from .process import run_capture, run_stream, start_process
 
@@ -257,6 +258,25 @@ def _ensure_node(settings, log=None, on_progress=None, cancel_event=None) -> Pat
     target = node_dir(settings)
     target.mkdir(parents=True, exist_ok=True)
     ver = NODE_VERSION
+
+    bundled = offline.node_zip()
+    if bundled is not None:
+        _log("使用内置 Node.js（离线）...")
+        try:
+            _extract_zip_strip_first(bundled, target)
+            exe = target / "node.exe"
+            if node_ok(exe):
+                settings.dsh_node_exe = str(exe)
+                try:
+                    settings.save()
+                except OSError as e:
+                    _log("保存 Node.js 路径失败（不影响本次使用）: " + str(e))
+                _log("内置 Node.js 就绪: " + str(exe))
+                return exe
+            raise RuntimeError("内置 Node.js 校验失败（版本不可用）")
+        except Exception as e:  # noqa: BLE001
+            _log("内置 Node.js 不可用，改为在线下载: " + str(e))
+
     _log(f"未检测到可用的 Node.js {MIN_NODE_MAJOR}+，正在下载便携版 Node.js {ver}（约 30MB）...")
     zip_path = settings.downloads_dir / f"node-{ver}-win-x64.zip"
     base = f"v{ver}/node-v{ver}-win-x64.zip"
@@ -279,20 +299,7 @@ def _ensure_node(settings, log=None, on_progress=None, cancel_event=None) -> Pat
 
     _log("正在解压 Node.js 便携版 ...")
     try:
-        with zipfile.ZipFile(zip_path) as z:
-            for m in z.infolist():
-                if m.is_dir():
-                    continue
-                parts = Path(m.filename).parts
-                if len(parts) <= 1:
-                    continue
-                rel = Path(*parts[1:])
-                if rel.is_absolute() or ".." in rel.parts:
-                    continue
-                out = target / rel
-                out.parent.mkdir(parents=True, exist_ok=True)
-                with z.open(m) as src, open(out, "wb") as dst:
-                    shutil.copyfileobj(src, dst)
+        _extract_zip_strip_first(zip_path, target)
     except Exception as e:  # noqa: BLE001
         raise RuntimeError("Node.js 解压失败: " + str(e)) from e
 
@@ -306,6 +313,24 @@ def _ensure_node(settings, log=None, on_progress=None, cancel_event=None) -> Pat
         _log("保存 Node.js 路径失败（不影响本次使用）: " + str(e))
     _log("便携版 Node.js 就绪: " + str(exe))
     return exe
+
+
+def _extract_zip_strip_first(zip_path: Path, target: Path) -> None:
+    """解压 zip，剥掉第一层目录（node-vXX-win-x64/）到 target。"""
+    with zipfile.ZipFile(zip_path) as z:
+        for m in z.infolist():
+            if m.is_dir():
+                continue
+            parts = Path(m.filename).parts
+            if len(parts) <= 1:
+                continue
+            rel = Path(*parts[1:])
+            if rel.is_absolute() or ".." in rel.parts:
+                continue
+            out = target / rel
+            out.parent.mkdir(parents=True, exist_ok=True)
+            with z.open(m) as src, open(out, "wb") as dst:
+                shutil.copyfileobj(src, dst)
 
 
 # ---------- 安装状态 ----------
@@ -372,6 +397,10 @@ def install(settings, log=None, on_progress=None, cancel_event=None, force=False
         on_progress=lambda p: _prog(4 + int(6 * max(0, min(100, p)) / 100)),
         cancel_event=cancel_event,
     )
+    if offline.dsh_payload() is not None and not is_installed(settings):
+        if _install_from_dsh_payload(settings, log=_log, on_progress=_prog):
+            _prog(100)
+            return
     _prog(10)
     npm = _npm_cli(node)
     if not npm:
@@ -462,6 +491,64 @@ def install(settings, log=None, on_progress=None, cancel_event=None, force=False
     ensure_bridge(settings, log=_log)
     _log("dsh 安装完成")
     _prog(100)
+
+
+def _install_from_dsh_payload(settings, log=None, on_progress=None) -> bool:
+    """用安装包内置的 dsh 离线包解压安装（零联网）。失败返回 False，交给在线安装兜底。"""
+    import tarfile
+
+    payload = offline.dsh_payload()
+    if payload is None:
+        return False
+
+    def _log(line):
+        if log:
+            log(str(line))
+
+    def _prog(pct):
+        if on_progress:
+            try:
+                on_progress(int(pct))
+            except Exception:  # noqa: BLE001
+                pass
+
+    d = dsh_dir(settings)
+    try:
+        _log("使用内置 dsh 离线包（零联网，首次解压约 1-3 分钟）...")
+        d.mkdir(parents=True, exist_ok=True)
+        workspace_dir(settings).mkdir(parents=True, exist_ok=True)
+        _prog(30)
+        stop = threading.Event()
+
+        def _tick():
+            pct = 30
+            while not stop.wait(3.0):
+                pct = min(74, pct + 2)
+                _prog(pct)
+
+        ticker = threading.Thread(target=_tick, daemon=True, name="dsh-extract-tick")
+        ticker.start()
+        try:
+            with tarfile.open(payload, "r:gz") as tf:
+                try:
+                    tf.extractall(d, filter="data")
+                except TypeError:      # Python < 3.12 没有 filter 参数
+                    tf.extractall(d)
+        finally:
+            stop.set()
+            ticker.join(timeout=2)
+        _prog(78)
+        if not is_installed(settings):
+            raise RuntimeError("离线包解压后未找到 dsh profile")
+        marker = bridge_marker(settings)
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text(BRIDGE_VERSION, encoding="utf-8")
+    except Exception as e:  # noqa: BLE001
+        _log("内置 dsh 离线包不可用，改用在线安装: " + str(e))
+        return False
+    write_config(settings, log=_log)
+    _log("dsh 安装完成（离线）")
+    return True
 
 
 # ---------- 配置 ----------

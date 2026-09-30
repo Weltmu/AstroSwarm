@@ -9,7 +9,7 @@
 ; 不带 /DEPLOYROOT 时，机器人环境默认装到安装目录下的「机器人」子文件夹（跟着安装目录走）。
 
 #define MyAppName "AstroSwarm 星群"
-#define MyAppVersion "1.2.14"
+#define MyAppVersion "1.2.15"
 #define MyAppExeName "AstroSwarm.exe"
 
 [Setup]
@@ -46,6 +46,18 @@ Source: "..\dist\uninstall.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\dist_package\AstroSwarm_客户版\使用说明.docx"; DestDir: "{app}"; Flags: ignoreversion
 ; 只用于"查看用户协议"按钮，按需展开（dontcopy 不随安装复制）
 Source: "..\src\qbotmanager\assets\agreements\user_eula.txt"; Flags: dontcopy
+; 离线载荷：内置 Python/Node/wheels/dsh，首次部署零联网（由 tools/build_offline_bundle.py 生成）
+; 开发机构建时若还没生成载荷，这段会被预处理条件跳过，不影响编译。
+#if FileExists(AddBackslash(SourcePath) + "..\offline\manifest.json")
+; 逐项列出，别用 "..\offline\*" —— 那个目录里还放着 Linux 端的 wheels（80MB+），
+; 通配会把它们塞进 Windows 安装包。
+Source: "..\offline\manifest.json"; DestDir: "{app}\offline"; Flags: ignoreversion
+Source: "..\offline\python-*-embed-amd64.zip"; DestDir: "{app}\offline"; Flags: ignoreversion
+Source: "..\offline\node-*-win-x64.zip"; DestDir: "{app}\offline"; Flags: ignoreversion
+Source: "..\offline\THIRD_PARTY_NOTICES.txt"; DestDir: "{app}\offline"; Flags: ignoreversion
+Source: "..\offline\wheels\*"; DestDir: "{app}\offline\wheels"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\offline\dsh\*"; DestDir: "{app}\offline\dsh"; Flags: ignoreversion recursesubdirs createallsubdirs
+#endif
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
@@ -61,11 +73,12 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 ; 机器人环境默认装在安装目录下的「机器人」子文件夹，卸载时一并删除。
 ; 用户在部署页改成别的磁盘时这个子目录根本不存在，删了也不会误伤。
 Type: filesandordirs; Name: "{app}\机器人"
+Type: filesandordirs; Name: "{app}\offline"
 
 [Run]
 ; 关键一步：文件复制完立刻跑 `AstroSwarm.exe --cli deploy`，装好 Python 运行时 + NoneBot2 依赖并写安装根指针。
 ; StatusMsg 会让安装程序显示部署进度页（CreateOutputProgressPage 负责文案），客户不需要再点任何东西。
-Filename: "{app}\{#MyAppExeName}"; Parameters: "{code:DeployParams}"; StatusMsg: "正在部署机器人运行环境（Python + NoneBot2），请保持网络畅通…"; Flags: runhidden waituntilterminated; Check: ShouldDeployNow
+Filename: "{app}\{#MyAppExeName}"; Parameters: "{code:DeployParams}"; StatusMsg: "正在安装机器人运行环境（内置运行时，无需联网，约 1-3 分钟）…"; Flags: runhidden waituntilterminated; Check: ShouldDeployNow
 Filename: "{app}\{#MyAppExeName}"; Description: "立即启动 AstroSwarm"; Flags: nowait postinstall skipifsilent
 
 [Code]

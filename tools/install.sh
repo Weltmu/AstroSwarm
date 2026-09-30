@@ -9,6 +9,8 @@
 #   --user NAME         服务运行用户（配合 --systemd，默认 root；建议建个专用用户）
 #   --bot               顺带部署机器人运行时（首次要几分钟）
 #   --no-deps          跳过 pip 安装（离线包已自带依赖时用）
+#   --offline          只用包内内置的 wheels 装依赖，一个字节都不联网（没内置则报错退出）
+#   --wheels DIR       指定内置 wheels 目录（默认自动找 ./wheels）
 #   --account-base URL  星群账号服务地址（默认官方托管 https://astroswarm.cn/api/account；
 #                       自建账号服务才需要改，等价于环境变量 ASTROSWARM_ACCOUNT_BASE）
 #
@@ -34,6 +36,8 @@ SYSTEMD=0
 RUN_USER="root"
 WITH_BOT=0
 WITH_DEPS=1
+OFFLINE=0
+WHEELS_DIR=""
 ACCOUNT_BASE="${ASTROSWARM_ACCOUNT_BASE:-}"
 
 while [ $# -gt 0 ]; do
@@ -46,6 +50,8 @@ while [ $# -gt 0 ]; do
     --systemd) SYSTEMD=1; shift ;;
     --bot)    WITH_BOT=1; shift ;;
     --no-deps) WITH_DEPS=0; shift ;;
+    --offline) OFFLINE=1; shift ;;
+    --wheels) WHEELS_DIR="$2"; shift 2 ;;
     -h|--help) sed -n '2,26p' "$0"; exit 0 ;;
     *) echo "未知参数：$1（-h 看用法）"; exit 1 ;;
   esac
@@ -87,16 +93,39 @@ fi
 VPY="$ROOT/venv/bin/python"
 
 if [ "$WITH_DEPS" = "1" ]; then
-  say "安装后端依赖（首次约 1-2 分钟）"
-  "$VPY" -m pip install -q --upgrade pip
-  INDEX="${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}"
-  # ⚠ 这些一个都不能少：
-  #   pynacl       —— 市场清单验签 + 权益验签；缺了会被当成「清单可能被篡改」并按未开通跑
-  #   cryptography —— 和风天气私钥生成
-  #   segno        —— 微信登录二维码渲染（缺了二维码接口 503）
-  #   httpx        —— 账号服务 / iLink 调用
-  "$VPY" -m pip install -q -i "$INDEX" \
-    fastapi 'uvicorn[standard]' pydantic httpx pynacl cryptography segno
+  # 内置 wheels：包里有 wheels/ 就默认用它们装依赖 —— 一个字节都不联网
+  if [ -z "$WHEELS_DIR" ]; then
+    for cand in "$HERE/wheels" "$HERE/offline/linux-wheels"; do
+      if [ -d "$cand" ] && ls "$cand"/*.whl >/dev/null 2>&1; then WHEELS_DIR="$cand"; break; fi
+    done
+  fi
+  [ -n "$WHEELS_DIR" ] && [ -d "$WHEELS_DIR" ] || WHEELS_DIR=""
+  if [ "$OFFLINE" = "1" ] && [ -z "$WHEELS_DIR" ]; then
+    die "--offline 需要包内 wheels/（内置依赖），当前没找到 —— 请换带内置依赖的完整包"
+  fi
+
+  if [ -n "$WHEELS_DIR" ]; then
+    say "安装后端依赖（用包内内置 wheels，离线）"
+    if ! "$VPY" -m pip install -q --no-index --find-links "$WHEELS_DIR" \
+         fastapi 'uvicorn[standard]' pydantic httpx pynacl cryptography segno; then
+      [ "$OFFLINE" = "1" ] && die "内置 wheels 装不上（包可能不完整）"
+      warn "内置 wheels 装不上，回退联网安装"
+      WHEELS_DIR=""
+    fi
+  fi
+
+  if [ -z "$WHEELS_DIR" ]; then
+    say "安装后端依赖（联网，首次约 1-2 分钟）"
+    "$VPY" -m pip install -q --upgrade pip
+    INDEX="${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}"
+    # ⚠ 这些一个都不能少：
+    #   pynacl       —— 市场清单验签 + 权益验签；缺了会被当成「清单可能被篡改」并按未开通跑
+    #   cryptography —— 和风天气私钥生成
+    #   segno        —— 微信登录二维码渲染（缺了二维码接口 503）
+    #   httpx        —— 账号服务 / iLink 调用
+    "$VPY" -m pip install -q -i "$INDEX" \
+      fastapi 'uvicorn[standard]' pydantic httpx pynacl cryptography segno
+  fi
 
   say "自检依赖（缺任何一个都会在这里直接报错，不再等到运行时静默降级）"
   "$VPY" - <<'PYEOF'
@@ -123,6 +152,16 @@ if [ "$SRC_APP" != "$ROOT/app" ]; then
   [ -d "$SRC_APP/qbotmanager" ] && cp -r "$SRC_APP/qbotmanager" "$ROOT/app/qbotmanager"
 fi
 [ -d "$ROOT/app/qbotmanager" ] || die "astroswarm_linux 同级缺 qbotmanager（机器人核心），源码树不完整"
+
+# 内置 wheels 一并铺进安装目录：deploy 会自动认 $ROOT/wheels-bot，
+# 这样客户删掉解压目录后再跑 deploy，依旧是零联网。
+for w in wheels wheels-bot; do
+  if [ -d "$HERE/$w" ] && [ "$HERE/$w" != "$ROOT/$w" ]; then
+    say "内置依赖 $w 铺到 $ROOT/$w"
+    mkdir -p "$ROOT/$w"
+    cp -f "$HERE/$w"/*.whl "$ROOT/$w/" 2>/dev/null || true
+  fi
+done
 
 if [ -n "$CONSOLE_SRC" ] && [ "$CONSOLE_SRC" != "$ROOT/console-dist" ]; then
   say "铺控制台前端产物到 $ROOT/console-dist"

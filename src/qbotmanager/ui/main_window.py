@@ -198,15 +198,20 @@ class MainWindow(QWidget):
     account_kicked = Signal(str)
 
     # 侧栏分组与控制台（无头端）的 NAV_GROUPS 一一对应：运行 / 能力 / 系统。
-    # 桌面端多出四个通道配置页（微信/QQ/飞书/纸飞机）—— 无头端把通道配置收在「接入」页里，
-    # 桌面端保留独立页面，统一挂在「运行」组，顺序与以前一致（少一次记忆迁移）。
+    # 通道详情页（微信/QQ/飞书/纸飞机）不再各占侧栏一行 —— 统一收进「接入」页，
+    # 由接入页里的「打开完整页」进入；进这些页时侧栏/图标栏高亮归属的「接入」。
     NAV_GROUPS = (
-        ("运行", ("首页", "接入", "微信", "QQ", "飞书", "纸飞机")),
+        ("运行", ("首页", "接入")),
         ("能力", ("AI 大脑", "插件", "插件工坊")),
         ("系统", ("全局管理", "消息中心", "日志", "依赖", "设置")),
     )
-    # 页面索引顺序：与控制台一致，新增页插在它该在的位置（不再往后追加）
-    PAGE_ORDER = tuple(n for _title, _items in NAV_GROUPS for n in _items)
+    # 收进父页的页面 → 归属的侧栏项（不单独占一行，但页面还在 stack 里，下标不变）
+    SUB_NAV_PARENT = {"微信": "接入", "QQ": "接入", "飞书": "接入", "纸飞机": "接入"}
+    # 页面索引顺序：必须与 self.pages 顺序一一对应，与控制台一致（新增页插在该在的位置）。
+    # 通道详情页排在「接入」后面，位置与旧版完全一致 —— 老的页面下标映射不用迁移。
+    PAGE_ORDER = ("首页", "接入", "微信", "QQ", "飞书", "纸飞机",
+                  "AI 大脑", "插件", "插件工坊",
+                  "全局管理", "消息中心", "日志", "依赖", "设置")
     # 小白模式（默认开启）下隐藏这些入口，可在「设置」里关掉
     ADVANCED_PAGES = ("微信", "QQ", "飞书", "纸飞机", "消息中心", "插件", "日志", "依赖")
     SEPARATOR = "— 全局管理 —"
@@ -219,6 +224,9 @@ class MainWindow(QWidget):
         self.settings = settings
         self.tasks = tasks
         self._closing = False
+        # 同步导航高亮时禁止回调再跳页：通道详情页没有自己的行/图标，
+        # 高亮归属的「接入」会触发 currentRowChanged，不拦就会被拽回接入页
+        self._nav_syncing = False
         self.setMinimumSize(self.MIN_WINDOW_W, self.MIN_WINDOW_H)
         self._exit_stop_tid = None
         self._exit_poll = None
@@ -610,7 +618,8 @@ class MainWindow(QWidget):
     def _build_rail(self):
         """深空终端的左侧图标栏（窄 Dock，与侧边栏/顶部导航互不重复）。"""
         self._rail_icons = dict(NAV_ICONS)
-        self._rail_names = list(self.PAGE_ORDER)
+        # 图标栏与侧栏同一套入口：通道详情页不单独出图标（从「接入」里进去）
+        self._rail_names = [n for n in self.PAGE_ORDER if n not in self.SUB_NAV_PARENT]
         self.rail = QWidget()
         self.rail.setObjectName("railWrap")
         self.rail.setFixedWidth(54)
@@ -643,7 +652,7 @@ class MainWindow(QWidget):
         lay.addWidget(self.rail_list)
 
     def _on_rail_changed(self, row):
-        if row < 0:
+        if row < 0 or self._nav_syncing:
             return
         name = self._rail_names[row]
         self._go_page(name)
@@ -693,6 +702,8 @@ class MainWindow(QWidget):
         self._current_layout_mode = theme_mod.UI_LAYOUT
 
     def _on_sidebar_changed(self, lst):
+        if self._nav_syncing:
+            return
         row = lst.currentRow()
         if row < 0:
             return
@@ -767,24 +778,30 @@ class MainWindow(QWidget):
                     pass
 
     def _sync_nav(self, name):
-        loc = self._nav_rows.get(name)
-        if loc is not None:
-            gi, row = loc
-            lst = self.nav_lists[gi]
-            if lst.currentRow() != row:
-                # setCurrentRow 会回调 _on_sidebar_changed -> _go_page，
-                # 第二次进来 currentRow 已经相等，不会递归
-                lst.setCurrentRow(row)
-            for other in self.nav_lists:
-                if other is not lst:
-                    other.setCurrentItem(None)
-        if self._rail_rows:
-            row = self._rail_rows.get(name)
-            if row is not None and self.rail_list.currentRow() != row:
-                self.rail_list.setCurrentRow(row)
-            self._paint_rail(name)
-        for btn, n in self._topnav_map.items():
-            btn.setChecked(n == name)
+        # 通道详情页没有自己的侧栏行 / 图标：高亮它归属的「接入」
+        name = self.SUB_NAV_PARENT.get(name, name)
+        self._nav_syncing = True
+        try:
+            loc = self._nav_rows.get(name)
+            if loc is not None:
+                gi, row = loc
+                lst = self.nav_lists[gi]
+                if lst.currentRow() != row:
+                    # setCurrentRow 会回调 _on_sidebar_changed -> _go_page，
+                    # 第二次进来 currentRow 已经相等，不会递归
+                    lst.setCurrentRow(row)
+                for other in self.nav_lists:
+                    if other is not lst:
+                        other.setCurrentItem(None)
+            if self._rail_rows:
+                row = self._rail_rows.get(name)
+                if row is not None and self.rail_list.currentRow() != row:
+                    self.rail_list.setCurrentRow(row)
+                self._paint_rail(name)
+            for btn, n in self._topnav_map.items():
+                btn.setChecked(n == name)
+        finally:
+            self._nav_syncing = False
 
     def switch_page(self, name):
         self._go_page(name)

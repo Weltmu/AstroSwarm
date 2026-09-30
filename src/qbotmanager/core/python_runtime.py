@@ -8,6 +8,7 @@ import zipfile
 from pathlib import Path
 
 from ..constants import GET_PIP_URLS, PYTHON_EMBED_URLS
+from . import offline_bundle as offline
 from .net import download
 from .process import run_capture, run_stream
 
@@ -48,6 +49,21 @@ def _bootstrap_pip(settings, exe: Path, log=None, cancel_event=None) -> None:
     """用 pip/setuptools 的 wheel 直接解压进 site-packages，免 get-pip。"""
     sp = exe.parent / "Lib" / "site-packages"
     sp.mkdir(parents=True, exist_ok=True)
+    wheels = offline.wheels_dir()
+    if wheels is not None:
+        want = [p for p in ("pip", "setuptools") if list(wheels.glob(p + "-*.whl"))]
+        if len(want) == 2:
+            if log:
+                log("使用内置 pip / setuptools（离线）...")
+            for pkg in want:
+                wheel_path = sorted(wheels.glob(pkg + "-*.whl"))[-1]
+                with zipfile.ZipFile(wheel_path) as z:
+                    z.extractall(sp)
+            rc, out = run_capture([str(exe), "-m", "pip", "--version"], timeout=120)
+            if rc == 0:
+                return
+            if log:
+                log("内置 pip 不可用，改为在线引导: " + out[-200:])
     index = settings.pip_index or "https://pypi.org/simple"
     if log:
         log("下载并安装 pip（wheel 方式）...")
@@ -213,6 +229,17 @@ def _deploy_embedded(settings, progress=None, log=None, cancel_event=None) -> Pa
         log(f"未检测到可用的系统 Python，准备内置 Python {ver}（免安装精简版）...")
     zip_path = settings.downloads_dir / f"python-{ver}-embed-amd64.zip"
     if not zip_path.exists():
+        bundled = offline.python_zip()
+        if bundled is not None:
+            if log:
+                log("使用内置 Python 运行时（离线）")
+            try:
+                settings.downloads_dir.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(bundled, zip_path)
+            except OSError as e:  # noqa: BLE001
+                if log:
+                    log(f"内置 Python 复制失败，改为在线下载: {e}")
+    if not zip_path.exists():
         if log:
             log("下载 Python 运行时 ...")
         last_err = None
@@ -288,6 +315,14 @@ def ensure_python(settings, progress=None, log=None, cancel_event=None) -> Path:
         return embedded
 
     # 4) 系统 Python -> 独立 venv
+    # 3.5) 安装包内置的 embeddable（离线优先：有内置就先解压，不再挑系统 Python）
+    if offline.python_zip() is not None:
+        exe = _deploy_embedded(settings, progress=progress, log=log, cancel_event=cancel_event)
+        settings.python_exe = str(exe)
+        settings.python_source = "embedded"
+        settings.save()
+        return exe
+
     sys_py = find_system_python(log=log)
     if sys_py is not None:
         venv_py = _create_venv(settings, sys_py, log=log)
@@ -319,7 +354,7 @@ def pip_args(settings):
 
 
 def install_packages(settings, packages, log=None, progress=None, direct=False,
-                     index=None, cancel_event=None) -> None:
+                     index=None, cancel_event=None, offline_wheels=None) -> None:
     """用运行时 pip 安装包（流式输出，可实时回传进度）。
 
     index 指定时强制使用该源；否则按 settings.pip_index；direct=True 时不使用任何镜像源。
@@ -348,7 +383,11 @@ def install_packages(settings, packages, log=None, progress=None, direct=False,
                 progress(-1)
 
     cmd = [str(py), "-m", "pip", "install", "--upgrade"]
-    if index is not None:
+    if offline_wheels is not None:
+        cmd += ["--no-index", "--find-links", str(offline_wheels)]
+        if log:
+            log("使用安装包内置依赖（离线安装，不联网）...")
+    elif index is not None:
         cmd += ["-i", index]
     elif not direct:
         cmd += pip_args(settings)
@@ -405,6 +444,15 @@ def install_with_fallback(settings, packages, log=None, progress=None, cancel_ev
     """
     if not packages:
         return
+    wheels = offline.wheels_dir()
+    if wheels is not None:
+        try:
+            install_packages(settings, packages, log=log, progress=progress,
+                             offline_wheels=wheels, cancel_event=cancel_event)
+            return
+        except Exception as e:  # noqa: BLE001
+            if log:
+                log("内置依赖包不完整，改用在线安装（" + str(e)[-300:] + "）")
     configured = (settings.pip_index or "").rstrip("/") or "https://pypi.org/simple"
     order = []
     for idx in (configured, *FALLBACK_INDEXES):

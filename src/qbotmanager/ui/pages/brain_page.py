@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
 from ...core import agent_profile, ai_config
 from ...core import message_store
 from ..theme import TEXT_3
-from ..widgets import EmptyState, GlassPanel
+from ..widgets import EmptyState, FoldSection, GlassPanel
 from .common import ModelFetchController, PageContext, Worker, make_row
 
 
@@ -193,7 +193,8 @@ class BrainPage(QWidget):
             lambda: self._model_fetcher.start("auto"))
 
         save_row = QHBoxLayout()
-        self.btn_save = QPushButton("保存 AI 配置")
+        self.btn_save = QPushButton("保存并测试")
+        self.btn_save.setToolTip("保存后自动拉一次服务商模型列表 —— 拉得到就说明密钥和地址能用")
         self.btn_save.setObjectName("primary")
         self.btn_save.clicked.connect(self._save_config)
         save_row.addWidget(self.btn_save)
@@ -389,16 +390,12 @@ class BrainPage(QWidget):
         p_tip.setStyleSheet(f"color: {TEXT_3}; font-size: 12px;")
         pv.addWidget(p_tip)
 
-        persona_row = QHBoxLayout()
-        persona_lbl = QLabel("人格设定")
-        persona_lbl.setStyleSheet(f"color: {TEXT_3}; font-size: 12px;")
-        persona_lbl.setAlignment(Qt.AlignTop)
-        self.ai_personality_edit = QPlainTextEdit()
-        self.ai_personality_edit.setPlaceholderText("机器人的人设/性格，例如：你是 AstroSwarm 星群内置 AI 助手，回答简洁直接…")
-        self.ai_personality_edit.setFixedHeight(84)
-        persona_row.addWidget(persona_lbl)
-        persona_row.addWidget(self.ai_personality_edit, 1)
-        pv.addLayout(persona_row)
+        # 人格设定按你的决定挪进「设置 → 高级 → 人格设定」：只留一句指路，
+        # 避免两处都能改、互相覆盖（这里是只读的执行侧）。
+        persona_hint = QLabel("人格设定已挪到「设置 → 高级 → 人格设定」；改完保存，重启机器人生效。")
+        persona_hint.setWordWrap(True)
+        persona_hint.setStyleSheet(f"color: {TEXT_3}; font-size: 12px;")
+        pv.addWidget(persona_hint)
 
         self.chk_proactive = QCheckBox("启用主动聊天（机器人会不定时主动找用户聊天）")
         pv.addWidget(self.chk_proactive)
@@ -496,7 +493,12 @@ class BrainPage(QWidget):
         mem_btns.addWidget(self.btn_memory_delete)
         mem_btns.addWidget(self.btn_memory_clear)
         mem_btns.addStretch(1)
-        mv.addLayout(mem_btns)
+        # 记忆 / 知识库这些管理动作收进折叠区，首屏只留开关与说明（功能一个没少）
+        self._mem_actions = QWidget()
+        ma = QVBoxLayout(self._mem_actions)
+        ma.setContentsMargins(0, 0, 0, 0)
+        ma.setSpacing(8)
+        ma.addLayout(mem_btns)
 
         # ---- 内置 AI 插件的全局记忆（另一个文件，与控制台同一份）----
         self.ai_mem_tip = QLabel("内置 AI 记忆（全局）：读取 bot/data/ai/aichat_memory.json，"
@@ -530,7 +532,7 @@ class BrainPage(QWidget):
         ai_mem_btns.addWidget(self.btn_ai_mem_delete)
         ai_mem_btns.addWidget(self.btn_ai_mem_clear)
         ai_mem_btns.addStretch(1)
-        mv.addLayout(ai_mem_btns)
+        ma.addLayout(ai_mem_btns)
 
         kb_tip = QLabel(
             "本地知识库：上传 txt / md 文档，AI 可调用 knowledge_search 检索回答（数据不出本机）。")
@@ -558,7 +560,10 @@ class BrainPage(QWidget):
         kb_btns.addWidget(self.btn_kb_refresh)
         kb_btns.addWidget(self.btn_kb_delete)
         kb_btns.addStretch(1)
-        mv.addLayout(kb_btns)
+        ma.addLayout(kb_btns)
+        mv.addWidget(FoldSection("记忆 / 知识库管理（导出 · 删除 · 清空）　▾",
+                                 "记忆 / 知识库管理（导出 · 删除 · 清空）　▴",
+                                 self._mem_actions))
         outer.addWidget(mem_panel)
 
         # ---- 状态摘要（只读） ----
@@ -587,7 +592,12 @@ class BrainPage(QWidget):
         btns.addWidget(btn_env)
         btns.addWidget(btn_plugins)
         btns.addStretch(1)
-        sv.addLayout(btns)
+        _path_actions = QWidget()
+        pa = QVBoxLayout(_path_actions)
+        pa.setContentsMargins(0, 0, 0, 0)
+        pa.setSpacing(6)
+        pa.addLayout(btns)
+        sv.addWidget(FoldSection("打开目录 / .env　▾", "打开目录 / .env　▴", _path_actions))
         outer.addWidget(self.summary_panel)
 
         self.empty = EmptyState("加载中", "")
@@ -661,8 +671,7 @@ class BrainPage(QWidget):
         self._fill_model_combo(str(cfg.get("api_url") or ""),
                                str(cfg.get("model") or ""))
 
-        # 人设与主动聊天（程序内设置）
-        self.ai_personality_edit.setPlainText(ai_config.read_personality(s))
+        # 主动聊天（人格设定在「设置 → 高级」里编辑，这里不再回填）
         pro = ai_config.read_proactive(s)
         self.chk_proactive.setChecked(pro["enabled"])
         self.ai_proactive_targets.setText(", ".join(pro["targets"]))
@@ -788,8 +797,8 @@ class BrainPage(QWidget):
             model=self.ai_model_edit.currentText().strip(),
         )
 
-        persona_ok = ai_config.save_personality(
-            s, self.ai_personality_edit.toPlainText())
+        # 人格设定在「设置 → 高级 → 人格设定」里保存；这里不再重复写，避免互相覆盖
+        persona_ok = True
         pro_ok = ai_config.save_proactive(
             s,
             enabled=self.chk_proactive.isChecked(),
@@ -836,8 +845,13 @@ class BrainPage(QWidget):
         if not mcp_ok:
             fails.append("MCP")
         self.ctx.show_toast(
-            ("AI 配置已保存，重启机器人生效"
+            (("AI 配置已保存，正在拉取模型列表验证连通…" if ai_ok
+              else "AI 配置已保存，重启机器人生效")
              + ("" if not fails else f"（{'、'.join(fails)}写入失败，请检查目录权限）")))
+        if ai_ok:
+            # 「保存并测试」＝保存 + 真拉一次服务商模型列表
+            # （拉得到就说明密钥 / 地址可用，拉不到会在提示里说明原因）
+            self._model_fetcher.start("manual")
         before = dict(self._loaded_agent_cfg)
         after = _agent_cfg_snapshot(s)
         self._loaded_agent_cfg = after
@@ -940,7 +954,6 @@ class BrainPage(QWidget):
             QMessageBox.warning(self, "启用失败", str(e))
             return
         self._loaded_persona = ai_config.read_personality(self.ctx.settings)
-        self.ai_personality_edit.setPlainText(self._loaded_persona)
         self.chk_agent_profile.setChecked(False)
         self._refresh_persona_list()
         self.ctx.show_toast(f"已启用人设：{res.get('name')}，重启机器人后生效")
@@ -1247,7 +1260,7 @@ class BrainPage(QWidget):
 
     def _maybe_auto_wake_generation(self, s):
         """人格变化且开了自动生成时，保存后后台重新生成唤醒词。"""
-        persona = self.ai_personality_edit.toPlainText().strip()
+        persona = ai_config.read_personality(s).strip()
         if (not s.agent_profile_enabled or not s.agent_wake_auto
                 or not persona
                 or persona == str(getattr(self, "_loaded_persona", "")).strip()):
@@ -1261,7 +1274,7 @@ class BrainPage(QWidget):
         api_url = self.ai_url_edit.text().strip() or str(cfg.get("api_url") or "")
         api_key = self.ai_key_edit.text().strip() or str(cfg.get("api_key") or "")
         model = self.ai_model_edit.currentText().strip() or str(cfg.get("model") or "")
-        persona = self.ai_personality_edit.toPlainText().strip()
+        persona = ai_config.read_personality(self.ctx.settings).strip()
         if not persona:
             self.ctx.show_toast("请先填写人格设定")
             return

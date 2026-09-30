@@ -16,6 +16,7 @@
 包内结构（install.sh 能直接认）：
     astroswarm/install.sh
     astroswarm/console-dist/{index.html,assets/...}
+    astroswarm/wheels/*.whl                （内置依赖：install.sh 默认用它离线装，零联网）
     astroswarm/app/astroswarm_linux/*.py
     astroswarm/app/qbotmanager/**
 
@@ -233,6 +234,10 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="打 Linux 无头端客户包")
     ap.add_argument("--version", default=None, help="版本号（默认取 astroswarm_linux/__init__.py）")
     ap.add_argument("--console-dist", default=None, help="控制台前端产物目录")
+    ap.add_argument("--wheels", default=None,
+                    help="内置依赖 wheels 目录（默认 offline/linux-wheels）")
+    ap.add_argument("--wheels-bot", default=None,
+                    help="内置机器人依赖 wheels 目录（默认 offline/linux-wheels-bot）")
     ap.add_argument("--out", default=str(REPO / "dist_package"), help="输出目录")
     ap.add_argument("--keep-staging", action="store_true", help="保留临时目录便于排查")
     args = ap.parse_args()
@@ -269,6 +274,31 @@ def main() -> int:
     copy_tree(REPO / "src" / "qbotmanager", root / "app" / "qbotmanager", stats)
     copy_tree(console_dist, root / "console-dist", stats)
     shutil.copy2(REPO / "tools" / "install.sh", root / "install.sh")
+
+    # 内置依赖 wheels：装完不用联网（install.sh 自动认 ./wheels，deploy 自动认 ./wheels-bot）
+    def _copy_wheels(src_dir: Path, dst_name: str) -> int:
+        count = 0
+        if src_dir.is_dir():
+            dst = root / dst_name
+            dst.mkdir(parents=True, exist_ok=True)
+            for whl in sorted(src_dir.glob("*.whl")):
+                shutil.copy2(whl, dst / whl.name)
+                count += 1
+        return count
+
+    wheels_dir = Path(args.wheels) if args.wheels else (REPO / "offline" / "linux-wheels")
+    wheels_bot_dir = (Path(args.wheels_bot) if args.wheels_bot
+                      else (REPO / "offline" / "linux-wheels-bot"))
+    wheel_count = _copy_wheels(wheels_dir, "wheels")
+    if wheel_count:
+        print(f"==> 内置后端依赖 wheels {wheel_count} 个（装控制台零联网）")
+    else:
+        print(f"    [!] 没找到内置 wheels（{wheels_dir}）—— 后端依赖只能联网装")
+    bot_wheel_count = _copy_wheels(wheels_bot_dir, "wheels-bot")
+    if bot_wheel_count:
+        print(f"==> 内置机器人依赖 wheels {bot_wheel_count} 个（部署机器人零联网）")
+    else:
+        print(f"    [!] 没找到内置机器人 wheels（{wheels_bot_dir}）—— 部署机器人要联网")
     (root / "VERSION").write_text(version + "\n", encoding="utf-8")
 
     print(f"    复制 {stats['copied']} 个文件，跳过 {stats['skipped_files']} 个；"
@@ -284,6 +314,8 @@ def main() -> int:
             p.relative_to(root).as_posix() for p in root.rglob("*") if p.is_file()),
         "excluded_paid_packs": sorted(PAID_PACK_IDS),
         "console_dist": str(console_dist),
+        "offline_wheels": wheel_count,
+        "offline_wheels_bot": bot_wheel_count,
     }
     (root / "MANIFEST.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")

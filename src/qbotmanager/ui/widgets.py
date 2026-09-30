@@ -7,7 +7,8 @@ from PySide6.QtGui import (
     QPixmap, QRadialGradient,
 )
 from PySide6.QtWidgets import (
-    QCheckBox, QFrame, QHBoxLayout, QLabel, QProgressBar, QVBoxLayout, QWidget,
+    QCheckBox, QFrame, QHBoxLayout, QLabel, QProgressBar, QPushButton,
+    QVBoxLayout, QWidget,
 )
 
 from . import theme as _theme
@@ -15,6 +16,39 @@ from .theme import RADIUS, TEXT_2, TEXT_3, status_color
 
 
 _NOISE_PIX: QPixmap | None = None
+
+
+class FoldSection(QWidget):
+    """折叠区：一行 ghost 按钮 + 默认收起的内容（QQ 页 / AI 大脑页共用）。
+
+    按钮太多的页面用它把次要动作收起来，首屏只留主流程；
+    展开状态记在自己身上，不被父页面刷新重置。
+    """
+
+    def __init__(self, closed_text: str, open_text: str, content: QWidget, parent=None):
+        super().__init__(parent)
+        self._closed = closed_text
+        self._open = open_text
+        self._content = content
+        self._expanded = False
+        v = QVBoxLayout(self)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.setSpacing(8)
+        self.btn = QPushButton(closed_text)
+        self.btn.setObjectName("ghost")
+        self.btn.clicked.connect(self.toggle)
+        # 左对齐的窄条，不要拉成一条占满整行的空框（看起来像输入框）
+        v.addWidget(self.btn, 0, Qt.AlignLeft)
+        content.setVisible(False)
+        v.addWidget(content)
+
+    def toggle(self):
+        self.set_expanded(not self._expanded)
+
+    def set_expanded(self, expanded: bool):
+        self._expanded = bool(expanded)
+        self._content.setVisible(self._expanded)
+        self.btn.setText(self._open if self._expanded else self._closed)
 
 
 class ToggleSwitch(QCheckBox):

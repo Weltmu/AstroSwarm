@@ -12,12 +12,14 @@ import time
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
-    QApplication, QCheckBox, QColorDialog, QComboBox, QFileDialog, QFrame,
+    QApplication, QCheckBox, QColorDialog, QComboBox, QDialog, QFileDialog, QFrame,
     QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton,
-    QScrollArea, QSlider, QTabWidget, QVBoxLayout, QWidget,
+    QPlainTextEdit, QScrollArea, QSlider, QTabWidget, QTextBrowser,
+    QVBoxLayout, QWidget,
 )
 
 from ...constants import APP_VERSION
+from ...core import ai_config
 from ...core import autostart as autostart_mod
 from ...core import license as lic_mod
 from ...core import migrate as migrate_mod
@@ -25,7 +27,7 @@ from ...core import update_check
 from ...tasks.workers import UninstallTask
 from .. import theme as theme_mod
 from ..theme import TEXT_3, THEMES, UI_THEMES
-from ..widgets import GlassPanel, ToggleSwitch
+from ..widgets import FoldSection, GlassPanel, ToggleSwitch
 from .common import PageContext, Worker, make_row
 
 
@@ -38,6 +40,7 @@ class SettingsPage(QWidget):
         self._build_ui()
         self.load_settings()
         self._connect_signals()
+        self._setup_autosave()
         self.ctx.tasks.finished.connect(self._on_task_finished)
 
     # ------------------------------------------------------------ UI
@@ -69,7 +72,7 @@ class SettingsPage(QWidget):
         head.setSpacing(8)
         title = QLabel("设置")
         title.setObjectName("pageTitle")
-        sub = QLabel("外观、账号与高级选项；外观改动实时预览，点「保存设置」写入配置")
+        sub = QLabel("外观、账号与高级选项；改动会自动保存（约 1 秒），也可以随时点「立即保存」")
         sub.setObjectName("pageSub")
         head.addWidget(title)
         head.addWidget(sub)
@@ -106,12 +109,12 @@ class SettingsPage(QWidget):
         foot = QHBoxLayout()
         foot.setContentsMargins(24, 16, 24, 16)
         foot.setSpacing(8)
-        self.btn_save = QPushButton("保存设置")
+        self.btn_save = QPushButton("立即保存")
         self.btn_save.setObjectName("primary")
         self.btn_save.setMinimumHeight(32)
         self.btn_save.clicked.connect(self._save)
         foot.addWidget(self.btn_save)
-        save_hint = QLabel("改动即时预览；这里保存全部页签的设置")
+        save_hint = QLabel("改动即时预览并自动写盘；这里可以立刻保存一次")
         save_hint.setStyleSheet(f"color: {TEXT_3}; font-size: 12px;")
         foot.addWidget(save_hint)
         foot.addStretch(1)
@@ -369,24 +372,84 @@ class SettingsPage(QWidget):
         lay.addWidget(env)
         self._add_info_rows(el, ("root", "nonebot_port", "python_source", "python_exe", "pip_index"))
 
-        # ---- 版本与更新 ----
-        ver, vl = self._card(
-            "版本与更新",
-            "客户端与全部插件源码在 GitHub 开源（Apache-2.0）：QQ 通道与全部能力包直接可用；"
-            "微信通道走腾讯官方 iLink，需在账号中心开通后扫码登录，"
-            "也可以自己用仓库里的适配器接入（不含官方支持）。")
-        lay.addWidget(ver)
-        self._add_info_rows(vl, ("app_version", "latest_version", "update_time"))
-        upd_row = QHBoxLayout()
-        upd_row.setSpacing(8)
+        # ---- 维护（版本信息常显；打开目录 / 导入旧版本 / 检查更新 / 许可 收进折叠区）----
+        mnt, ml = self._card(
+            "维护",
+            "版本信息在这里；打开目录、导入旧版本、检查更新、第三方许可都收在下面的折叠区。",
+            strong=True)
+        lay.addWidget(mnt)
+        self._add_info_rows(ml, ("app_version", "latest_version", "update_time"))
+        maint_actions = QWidget()
+        _ma = QVBoxLayout(maint_actions)
+        _ma.setContentsMargins(0, 0, 0, 0)
+        _ma.setSpacing(8)
+
+        _row1 = QHBoxLayout()
+        _row1.setSpacing(8)
+        btn_settings = QPushButton("打开 settings.json")
+        btn_settings.setObjectName("ghost")
+        btn_settings.setMinimumHeight(32)
+        btn_settings.setMinimumWidth(120)
+        btn_settings.clicked.connect(
+            lambda: os.startfile(str(self.ctx.settings.settings_file)))
+        btn_root = QPushButton("打开安装目录")
+        btn_root.setObjectName("ghost")
+        btn_root.setMinimumHeight(32)
+        btn_root.setMinimumWidth(120)
+        btn_root.clicked.connect(lambda: os.startfile(str(self.ctx.settings.root)))
+        btn_env = QPushButton("打开 .env")
+        btn_env.setObjectName("ghost")
+        btn_env.setMinimumHeight(32)
+        btn_env.setMinimumWidth(120)
+        btn_env.setToolTip("机器人的环境变量文件（端口 / 令牌等）")
+        btn_env.clicked.connect(
+            lambda: os.startfile(str(self.ctx.settings.bot_env_file)))
+        _row1.addWidget(btn_settings)
+        _row1.addWidget(btn_root)
+        _row1.addWidget(btn_env)
+        _row1.addStretch(1)
+        _ma.addLayout(_row1)
+
+        _row2 = QHBoxLayout()
+        _row2.setSpacing(8)
+        btn_import = QPushButton("导入旧版本")
+        btn_import.setObjectName("ghost")
+        btn_import.setMinimumHeight(32)
+        btn_import.setMinimumWidth(130)
+        btn_import.setToolTip("选择旧版本安装目录并沿用：配置、插件、QQ/微信登录信息原地保留，无需重新部署")
+        btn_import.clicked.connect(self._import_old)
         btn_update = QPushButton("检查更新")
         btn_update.setObjectName("ghost")
         btn_update.setMinimumHeight(32)
         btn_update.setMinimumWidth(110)
         btn_update.clicked.connect(self._check_update)
-        upd_row.addWidget(btn_update)
-        upd_row.addStretch(1)
-        vl.addLayout(upd_row)
+        btn_lic = QPushButton("第三方许可")
+        btn_lic.setObjectName("ghost")
+        btn_lic.setMinimumHeight(32)
+        btn_lic.setMinimumWidth(110)
+        btn_lic.setToolTip("查看随程序一起分发的第三方组件与它们的开源许可")
+        btn_lic.clicked.connect(self._show_licenses)
+        _row2.addWidget(btn_import)
+        _row2.addWidget(btn_update)
+        _row2.addWidget(btn_lic)
+        _row2.addStretch(1)
+        _ma.addLayout(_row2)
+        ml.addWidget(FoldSection("维护操作（打开目录 · 导入旧版本 · 检查更新 · 许可）　▾",
+                                 "维护操作（打开目录 · 导入旧版本 · 检查更新 · 许可）　▴",
+                                 maint_actions))
+
+        # ---- 人格设定（从「AI 大脑」挪过来：一处编辑，避免两边互相覆盖）----
+        per, pl = self._card(
+            "人格设定",
+            "机器人的人格 / 性格。保存后重启机器人生效；启用了「智能体档案」时，"
+            "档案只决定功能层，人格仍以这里为准。",
+            strong=True)
+        lay.addWidget(per)
+        self.personality_edit = QPlainTextEdit()
+        self.personality_edit.setPlaceholderText(
+            "例如：你是 AstroSwarm 星群内置 AI 助手，回答简洁直接，不废话…")
+        self.personality_edit.setFixedHeight(96)
+        pl.addWidget(self.personality_edit)
 
         # ---- AI 插件（内置，可停用；接口配置在「AI 大脑」页）----
         ai, al = self._card(
@@ -423,42 +486,7 @@ class SettingsPage(QWidget):
         bl.addWidget(self.chk_developer_mode)
         bl.addWidget(self.chk_beginner_mode)
 
-        # ---- 维护 ----
-        mnt, ml = self._card(
-            "维护",
-            "打开配置文件或安装目录；也可关联旧版本安装目录，配置、插件与登录信息原地保留。",
-            strong=True)
-        lay.addWidget(mnt)
-        mnt_row1 = QHBoxLayout()
-        mnt_row1.setSpacing(8)
-        btn_settings = QPushButton("打开 settings.json")
-        btn_settings.setObjectName("ghost")
-        btn_settings.setMinimumHeight(32)
-        btn_settings.setMinimumWidth(120)
-        btn_settings.clicked.connect(lambda: os.startfile(str(self.ctx.settings.settings_file)))
-        btn_root = QPushButton("打开安装目录")
-        btn_root.setObjectName("ghost")
-        btn_root.setMinimumHeight(32)
-        btn_root.setMinimumWidth(120)
-        btn_root.clicked.connect(lambda: os.startfile(str(self.ctx.settings.root)))
-        mnt_row1.addWidget(btn_settings)
-        mnt_row1.addWidget(btn_root)
-        mnt_row1.addStretch(1)
-        ml.addLayout(mnt_row1)
-
-        mnt_row2 = QHBoxLayout()
-        mnt_row2.setSpacing(8)
-        btn_import = QPushButton("导入旧版本")
-        btn_import.setObjectName("ghost")
-        btn_import.setMinimumHeight(32)
-        btn_import.setMinimumWidth(130)
-        btn_import.setToolTip("选择旧版本安装目录并沿用：配置、插件、QQ/微信登录信息原地保留，无需重新部署")
-        btn_import.clicked.connect(self._import_old)
-        mnt_row2.addWidget(btn_import)
-        mnt_row2.addStretch(1)
-        ml.addLayout(mnt_row2)
-
-        # ---- 危险操作（页签底部单独一行，远离主按钮）----
+    # ---- 危险操作（页签底部单独一行，远离主按钮）----
         dgr, dl = self._card(
             "危险操作",
             "卸载会停止全部服务并删除整个安装目录（bot / python / 日志等）；"
@@ -543,6 +571,48 @@ QTabBar::tab:selected {{ color: {active}; border-bottom: 2px solid {accent}; }}
         self.chk_developer_mode.toggled.connect(self._on_developer_toggled)
         self.chk_beginner_mode.toggled.connect(self._on_beginner_toggled)
 
+    def _setup_autosave(self):
+        """改动自动保存（防抖 800ms）：不用记得点保存，也不会因为关窗丢配置。
+
+        滑条拖动、输入框打字都会连续触发，所以统一走定时器去抖动，
+        避免每秒写几十次 settings.json。手动「保存设置」按钮保留作兜底。
+        """
+        self._autosave_timer = QTimer(self)
+        self._autosave_timer.setSingleShot(True)
+        self._autosave_timer.setInterval(800)
+        self._autosave_timer.timeout.connect(self._autosave_now)
+        for w in self.findChildren(QCheckBox):
+            w.toggled.connect(self._schedule_autosave)
+        for w in self.findChildren(QComboBox):
+            w.currentIndexChanged.connect(self._schedule_autosave)
+        for w in self.findChildren(QSlider):
+            w.valueChanged.connect(self._schedule_autosave)
+        for w in self.findChildren(QLineEdit):
+            w.textEdited.connect(self._schedule_autosave)
+        for w in self.findChildren(QPlainTextEdit):
+            w.textChanged.connect(self._schedule_autosave)
+
+    def _schedule_autosave(self, *_args):
+        timer = getattr(self, "_autosave_timer", None)
+        if timer is not None:
+            timer.start()
+
+    def _autosave_now(self):
+        try:
+            # apply_ui=False：自动保存只写盘，不再回头调 apply_appearance。
+            # 外观本来就是「改动即时预览」的（_apply_live 已经套用过一次），
+            # 这里再套一遍会让控件值被回写 → 又触发一次保存，转成死循环。
+            self._save(silent=True, apply_ui=False)
+        except RuntimeError:
+            # 窗口已经销毁（关程序 / 测试收尾）：停掉定时器，别再对着已删除的
+            # C++ 对象调 apply_appearance（否则打一堆 libshiboken 报错）
+            timer = getattr(self, "_autosave_timer", None)
+            if timer is not None:
+                try:
+                    timer.stop()
+                except RuntimeError:
+                    pass
+
     # ------------------------------------------------------------ 状态
     def load_settings(self):
         s = self.ctx.settings
@@ -564,6 +634,7 @@ QTabBar::tab:selected {{ color: {active}; border-bottom: 2px solid {accent}; }}
         self.opacity_slider.setValue(max(10, min(95, s.ui_opacity)))
         self.bright_slider.setValue(max(-100, min(100, s.bg_brightness)))
         self.chk_animations.setChecked(not s.animations_enabled)
+        self.personality_edit.setPlainText(ai_config.read_personality(s))
         idx = self.theme_combo.findData(s.theme)
         self.theme_combo.setCurrentIndex(idx if idx >= 0 else 0)
         idx = self.accent_combo.findData(s.accent)
@@ -584,6 +655,41 @@ QTabBar::tab:selected {{ color: {active}; border-bottom: 2px solid {accent}; }}
         self.chk_developer_mode.setChecked(s.developer_mode)
         self.chk_beginner_mode.setChecked(s.beginner_mode)
         self._refresh_rescue_banner()
+
+    def _show_licenses(self):
+        from ...core import licenses as licenses_mod
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("第三方许可")
+        dlg.resize(640, 480)
+        lay = QVBoxLayout(dlg)
+        rows = "".join(
+            f"<tr><td>{name}</td><td>{ver}</td><td>{lic}</td></tr>"
+            for name, ver, lic, _url in licenses_mod.BUNDLED_COMPONENTS
+        )
+        html = (
+            "<p>以下组件随本程序一起分发，全部为宽松许可（MIT / Apache-2.0 / BSD / PSF 等）。"
+            "完整许可原文随安装包提供（offline/THIRD_PARTY_NOTICES.txt）。</p>"
+            "<table border='1' cellspacing='0' cellpadding='5' width='100%'>"
+            "<tr><th>组件</th><th>版本</th><th>许可</th></tr>"
+            + rows
+            + "</table>"
+        )
+        browser = QTextBrowser()
+        browser.setHtml(html)
+        browser.setOpenExternalLinks(True)
+        lay.addWidget(browser)
+        btn = QPushButton("打开完整许可文本")
+        btn.setMinimumHeight(32)
+        btn.setEnabled(licenses_mod.notices_file() is not None)
+
+        def _open():
+            if not licenses_mod.open_notices():
+                QMessageBox.information(dlg, "第三方许可", "完整许可文本随安装包提供，当前环境未找到该文件。")
+
+        btn.clicked.connect(_open)
+        lay.addWidget(btn)
+        dlg.exec()
 
     def refresh_status(self):
         """定时刷新：只更新只读信息，不碰外观控件（防止用户操作被重置）。"""
@@ -697,6 +803,7 @@ QTabBar::tab:selected {{ color: {active}; border-bottom: 2px solid {accent}; }}
         s.ui_color = self.btn_color.text().strip() or "#FFFFFF"
         s.nonebot_enabled = True  # NoneBot 是内置进程，不允许关闭
         s.ai_enabled = self.chk_ai_enabled.isChecked()
+        ai_config.save_personality(s, self.personality_edit.toPlainText())
         s.auto_start_services = self.chk_auto_start_services.isChecked()
         s.auto_launch_on_boot = self.chk_autostart_boot.isChecked()
         s.developer_mode = self.chk_developer_mode.isChecked()
@@ -874,7 +981,7 @@ QTabBar::tab:selected {{ color: {active}; border-bottom: 2px solid {accent}; }}
                 "卸载未完全成功：" + str(result.get("error") or result))
 
     # ------------------------------------------------------------ 保存
-    def _save(self):
+    def _save(self, silent=False, apply_ui=True):
         s = self.ctx.settings
         p = self.path_edit.text().strip()
         img = p.lower().endswith((".png", ".jpg", ".jpeg", ".bmp", ".webp"))
@@ -903,5 +1010,7 @@ QTabBar::tab:selected {{ color: {active}; border-bottom: 2px solid {accent}; }}
             self.ctx.show_toast("保存设置失败: " + str(e))
             return
         autostart_mod.set_enabled(s.auto_launch_on_boot)
-        self.ctx.apply_appearance()
-        self.ctx.show_toast("设置已保存")
+        if apply_ui:
+            self.ctx.apply_appearance()
+        if not silent:
+            self.ctx.show_toast("设置已保存")

@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 """首页：总览仪表盘 —— 各平台服务状态 + 今日数据 + 最近消息预览 + 快速操作。"""
-import os
 import time
 import webbrowser
 
@@ -8,7 +7,7 @@ from PySide6.QtWidgets import (
     QFrame, QHBoxLayout, QLabel, QListWidget, QListWidgetItem,
     QPushButton, QVBoxLayout, QWidget,
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor
 
 from ...core import message_store
@@ -16,6 +15,21 @@ from ...tasks.workers import StartStopTask
 from ..theme import TEXT_3
 from ..widgets import EmptyState, GlassPanel, StatusBadge
 from .common import PageContext, TaskPanel, make_row
+
+
+class _ClickablePanel(GlassPanel):
+    """整张卡可点：顶掉卡片里的小按钮（点卡片任意位置就进详情）。"""
+
+    clicked = Signal()
+
+    def __init__(self, parent=None, strong=False):
+        super().__init__(parent, strong=strong)
+        self.setCursor(Qt.PointingHandCursor)
+
+    def mouseReleaseEvent(self, event):  # noqa: N802  (Qt 命名)
+        if event.button() == Qt.LeftButton:
+            self.clicked.emit()
+        super().mouseReleaseEvent(event)
 
 
 class HomePage(QWidget):
@@ -50,6 +64,27 @@ class HomePage(QWidget):
         title_row.addWidget(self.last_update)
         title_row.addWidget(self.global_badge)
         outer.addLayout(title_row)
+
+        # ---- 「下一步」引导：只显示当下最该做的那一件事 ----
+        self.next_bar = QFrame()
+        self.next_bar.setObjectName("nextStepBar")
+        self.next_bar.setStyleSheet(
+            "QFrame#nextStepBar { background: rgba(127,176,255,0.10);"
+            " border: 1px solid rgba(127,176,255,0.35); border-radius: 10px; }"
+        )
+        nb = QHBoxLayout(self.next_bar)
+        nb.setContentsMargins(14, 10, 14, 10)
+        nb.setSpacing(10)
+        self.next_text = QLabel("")
+        self.next_text.setStyleSheet("font-size: 13px;")
+        nb.addWidget(self.next_text, 1)
+        self.next_btn = QPushButton("去配置")
+        self.next_btn.setObjectName("primary")
+        self.next_btn.clicked.connect(self._on_next_clicked)
+        nb.addWidget(self.next_btn)
+        self.next_bar.setVisible(False)
+        outer.addWidget(self.next_bar)
+        self._next_action = ""
 
         # ---- 平台状态卡片（QQ / 微信 / 飞书 / 纸飞机） ----
         cards = QHBoxLayout()
@@ -107,9 +142,13 @@ class HomePage(QWidget):
             "QListWidget#recentList::item:hover { background: rgba(255,255,255,0.04); }"
         )
         rv.addWidget(self.recent_list, 1)
-        btn_center = QPushButton("打开消息中心")
-        btn_center.clicked.connect(lambda: self.ctx.switch_page("消息中心"))
-        rv.addWidget(btn_center)
+        # 消息预览本身就是入口：点任意一条直接进消息中心（省掉一个按钮）
+        self.recent_list.setCursor(Qt.PointingHandCursor)
+        self.recent_list.itemClicked.connect(
+            lambda _item: self.ctx.switch_page("消息中心"))
+        hint_center = QLabel("点上面任意一条 → 进入消息中心")
+        hint_center.setStyleSheet(f"color: {TEXT_3}; font-size: 11px;")
+        rv.addWidget(hint_center)
         mid.addWidget(recent, 7)
         outer.addLayout(mid, 1)
 
@@ -128,23 +167,11 @@ class HomePage(QWidget):
         self.btn_toggle.setObjectName("primary")
         self.btn_toggle.clicked.connect(self._on_toggle_clicked)
         qv.addWidget(self.btn_toggle)
-        self.btn_advanced = QPushButton("高级…")
-        self.btn_advanced.setObjectName("ghost")
-        self.btn_advanced.clicked.connect(self._toggle_advanced)
-        qv.addWidget(self.btn_advanced)
-
-        self.advanced_box = QFrame()
-        ab = QVBoxLayout(self.advanced_box)
-        ab.setContentsMargins(0, 0, 0, 0)
-        ab.setSpacing(8)
-        self.btn_restart = QPushButton("重启机器人")
-        self.btn_restart.clicked.connect(self._restart_bot)
-        self.btn_env = QPushButton("打开 .env")
-        self.btn_env.clicked.connect(self._open_env)
-        ab.addWidget(self.btn_restart)
-        ab.addWidget(self.btn_env)
-        self.advanced_box.setVisible(False)
-        qv.addWidget(self.advanced_box)
+        # 一屏只留一个主操作；重启在「全局管理」、.env 在「设置 → 维护」，不再堆在首页
+        tip_op = QLabel("一键启停全部通道。重启在「全局管理」，.env 在「设置 → 维护」。")
+        tip_op.setWordWrap(True)
+        tip_op.setStyleSheet(f"color: {TEXT_3}; font-size: 11px;")
+        qv.addWidget(tip_op)
         qv.addStretch(1)
         bottom.addWidget(quick, 4)
 
@@ -179,8 +206,10 @@ class HomePage(QWidget):
             if w is not None:
                 w.setVisible(not on)
 
-    def _card(self, parent_layout, name):
-        card = GlassPanel()
+    def _card(self, parent_layout, name, on_click=None):
+        card = _ClickablePanel() if on_click else GlassPanel()
+        if on_click:
+            card.clicked.connect(on_click)
         v = QVBoxLayout(card)
         v.setContentsMargins(16, 14, 16, 16)
         v.setSpacing(8)
@@ -190,29 +219,22 @@ class HomePage(QWidget):
         return card, v, badge
 
     def _build_qq_card(self, cards):
-        card, v, self.qq_badge = self._card(cards, "QQ 机器人")
+        card, v, self.qq_badge = self._card(
+            cards, "QQ 机器人", on_click=lambda: self.ctx.switch_page("接入"))
         self.qq_info = QLabel("—")
         self.qq_info.setWordWrap(True)
         self.qq_info.setStyleSheet(f"color: {TEXT_3}; font-size: 12px;")
         v.addWidget(self.qq_info)
-        row = QHBoxLayout()
-        btn = QPushButton("去管理")
-        btn.clicked.connect(lambda: self.ctx.switch_page("接入"))
-        row.addWidget(btn)
-        row.addStretch(1)
-        v.addLayout(row)
         v.addStretch(1)
 
     def _build_wechat_card(self, cards):
-        card, v, self.wx_badge = self._card(cards, "微信 ClawBot")
+        card, v, self.wx_badge = self._card(
+            cards, "微信 ClawBot", on_click=lambda: self.ctx.switch_page("接入"))
         self.wx_info = QLabel("—")
         self.wx_info.setWordWrap(True)
         self.wx_info.setStyleSheet(f"color: {TEXT_3}; font-size: 12px;")
         v.addWidget(self.wx_info)
         row = QHBoxLayout()
-        btn = QPushButton("去管理")
-        btn.clicked.connect(lambda: self.ctx.switch_page("接入"))
-        row.addWidget(btn)
         self.wx_pay_btn = QPushButton("开通微信通道")
         self.wx_pay_btn.setObjectName("ghost")
         self.wx_pay_btn.clicked.connect(self._open_pay)
@@ -281,29 +303,40 @@ class HomePage(QWidget):
                 return
         self._start_stop(not self._bot_running)
 
-    def _toggle_advanced(self):
-        show = not self.advanced_box.isVisible()
-        self.advanced_box.setVisible(show)
-        self.btn_advanced.setText("收起高级" if show else "高级…")
-
-    def _restart_bot(self):
-        from ...tasks.workers import RestartBotTask
-
-        if not self._confirm("重启机器人", "重启期间机器人会短暂离线。确定继续吗？"):
+    def _refresh_next_step(self):
+        """状态引导：首页只顶出「现在最该做的那一步」，别的都不抢注意力。"""
+        s = self.ctx.settings
+        m = self.ctx.manager
+        running = bool(m.bot_running() or m.qq_running() or m.dsh_running())
+        if running:
+            self.next_bar.setVisible(False)
+            self._next_action = ""
             return
-        self.ctx.tasks.submit(
-            "重启 NoneBot", "service", RestartBotTask,
-            retryable=True, manager=self.ctx.manager,
-            payload={"reset_wechat": False},
+        summary = message_store.brain_summary(s)
+        ai_ok = bool(str(summary.get("model") or "").strip())
+        official_missing = (
+            str(getattr(s, "qq_channel", "onebot")) == "official"
+            and not str(getattr(s, "qq_official_appid", "") or "").strip()
         )
+        if not ai_ok:
+            text, btn, action = "下一步：先配 AI 大脑（填 API Key，约 30 秒）", "去配置", "brain"
+        elif official_missing:
+            text, btn, action = "下一步：接 QQ 官方机器人（填 AppID / Token）", "去接入", "access"
+        else:
+            text, btn, action = "下一步：启动机器人（QQ / 微信 一起上线）", "一键启动", "start"
+        self.next_text.setText(text)
+        self.next_btn.setText(btn)
+        self._next_action = action
+        self.next_bar.setVisible(True)
 
-    def _open_env(self):
-        path = str(self.ctx.settings.bot_env_file)
-        try:
-            if hasattr(os, "startfile"):        # Windows
-                os.startfile(path)              # noqa: S606
-        except OSError:
-            pass
+    def _on_next_clicked(self):
+        action = getattr(self, "_next_action", "")
+        if action == "start":
+            self._on_toggle_clicked()
+        elif action == "brain":
+            self.ctx.switch_page("AI 大脑")
+        else:
+            self.ctx.switch_page("接入")
 
     def _confirm(self, title: str, text: str) -> bool:
         from PySide6.QtWidgets import QMessageBox
@@ -356,6 +389,7 @@ class HomePage(QWidget):
         # 主操作随状态翻转：运行中就是「停止全部」
         self._bot_running = bool(bot_on)
         self.btn_toggle.setText("停止全部" if bot_on else "启动全部")
+        self._refresh_next_step()
 
         summary = message_store.brain_summary(s)
         self.stat_labels["messages"].setText(str(message_store.load_message_count(s)))

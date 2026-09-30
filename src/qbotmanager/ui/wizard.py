@@ -86,12 +86,23 @@ class DeployWizard(QDialog):
         pv = QVBoxLayout(self.page_choose)
 
         tip = QLabel(
-            "请选择安装目录：\n"
-            "Python 运行时、机器人项目（NoneBot）全部安装在这个文件夹里。\n"
-            "建议安装在剩余空间大于 4GB 的磁盘。"
+            "点一下「一键开始」就装好了，全部用推荐设置：\n"
+            "运行环境已随安装包内置，不用联网、不用选路径、不用填任何东西。"
         )
         tip.setWordWrap(True)
         pv.addWidget(tip)
+
+        self.btn_custom = QPushButton("自定义 ▸")
+        self.btn_custom.setFlat(True)
+        self.btn_custom.setStyleSheet("color: #7FB0FF; font-size: 12px; text-align: left;")
+        self.btn_custom.clicked.connect(self._toggle_custom)
+        pv.addWidget(self.btn_custom, 0, Qt.AlignLeft)
+
+        # ---- 自定义区（默认折叠，展开后才是旧版的那些选项）----
+        self.custom_box = QWidget()
+        cv = QVBoxLayout(self.custom_box)
+        cv.setContentsMargins(0, 0, 0, 0)
+        cv.setSpacing(8)
 
         row = QHBoxLayout()
         self.root_edit = QLineEdit(default_root())
@@ -99,21 +110,21 @@ class DeployWizard(QDialog):
         btn_browse.clicked.connect(self._browse)
         row.addWidget(self.root_edit, 1)
         row.addWidget(btn_browse)
-        pv.addLayout(row)
+        cv.addLayout(row)
 
         self.chk_shortcut = QCheckBox("创建桌面快捷方式（推荐）")
         self.chk_shortcut.setChecked(True)
-        pv.addWidget(self.chk_shortcut)
+        cv.addWidget(self.chk_shortcut)
 
         self.chk_auto_start_services = QCheckBox("启动程序时自动启动全部服务")
         self.chk_auto_start_services.setChecked(False)
-        pv.addWidget(self.chk_auto_start_services)
+        cv.addWidget(self.chk_auto_start_services)
 
         self.chk_autostart = QCheckBox("开机自动启动 AstroSwarm")
         # 安装包（Inno 附加任务）可能已经写过自启动注册表项：以实际状态为准，
         # 否则会出现「安装时勾了、程序里没勾」的矛盾
         self.chk_autostart.setChecked(autostart_mod.is_enabled())
-        pv.addWidget(self.chk_autostart)
+        cv.addWidget(self.chk_autostart)
 
         proto_tip = QLabel(
             "QQ 机器人通过第三方 OneBot 协议接入：\n"
@@ -122,23 +133,24 @@ class DeployWizard(QDialog):
         )
         proto_tip.setWordWrap(True)
         proto_tip.setStyleSheet("color: #B9C3D4; font-size: 12px;")
-        pv.addWidget(proto_tip)
+        cv.addWidget(proto_tip)
+        self.custom_box.setVisible(False)
+        pv.addWidget(self.custom_box)
 
         eula_row = QHBoxLayout()
         eula_row.setSpacing(8)
-        self.chk_eula = QCheckBox(
-            "我已阅读并同意《用户协议与免责声明》：第三方协议端由用户自行安装并承担账号风险"
-        )
-        self.chk_eula.setChecked(False)
+        eula_tip = QLabel("点「一键开始」即表示同意《用户协议与免责声明》（含第三方协议端风险说明）")
+        eula_tip.setWordWrap(True)
+        eula_tip.setStyleSheet("color: #B9C3D4; font-size: 12px;")
         btn_eula = QPushButton("查看协议")
         btn_eula.setFlat(True)
         btn_eula.setStyleSheet("color: #7FB0FF; font-size: 12px;")
         btn_eula.clicked.connect(self._show_eula)
-        eula_row.addWidget(self.chk_eula, 1)
+        eula_row.addWidget(eula_tip, 1)
         eula_row.addWidget(btn_eula)
         pv.addLayout(eula_row)
 
-        self.btn_next = QPushButton("开始部署")
+        self.btn_next = QPushButton("一键开始")
         self.btn_next.setStyleSheet("padding: 8px; font-size: 14px;")
         self.btn_next.clicked.connect(self._start_deploy)
         pv.addWidget(self.btn_next, 0, Qt.AlignRight)
@@ -189,13 +201,15 @@ class DeployWizard(QDialog):
         if d:
             self.root_edit.setText(d)
 
+    def _toggle_custom(self):
+        show = not self.custom_box.isVisible()
+        self.custom_box.setVisible(show)
+        self.btn_custom.setText("自定义 ▾" if show else "自定义 ▸")
+
     def _start_deploy(self):
         root = self.root_edit.text().strip()
         if not root:
             QMessageBox.warning(self, "提示", "请先选择安装目录")
-            return
-        if not self.chk_eula.isChecked():
-            QMessageBox.warning(self, "提示", "请先阅读并勾选《用户协议与免责声明》")
             return
         try:
             self.settings = Settings.load(root)

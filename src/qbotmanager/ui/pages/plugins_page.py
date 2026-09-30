@@ -140,7 +140,7 @@ class PluginsPage(QWidget):
         self.btn_market_refresh.clicked.connect(self._load_market)
         self.btn_market_install = QPushButton("安装")
         self.btn_market_install.setObjectName("primary")
-        self.btn_market_install.clicked.connect(self._install_market_plugin)
+        self.btn_market_install.clicked.connect(lambda: self._install_market_plugin())
         m_row.addWidget(m_lbl)
         m_row.addWidget(self.market_combo, 1)
         m_row.addWidget(self.btn_market_refresh)
@@ -447,9 +447,9 @@ class PluginsPage(QWidget):
         if status == "success" and name == "检查插件依赖":
             self._on_check_done(result)
         elif status == "success" and name in ("安装插件", "安装依赖"):
-            self.ctx.show_toast("安装完成，点击「重启 NoneBot 生效」")
+            self._prompt_restart("安装完成")
         elif status == "success" and name == "安装市场插件":
-            self.ctx.show_toast("插件安装完成，点击「重启 NoneBot 生效」")
+            self._prompt_restart("插件安装完成")
 
     def _on_check_done(self, result):
         missing = result.get("missing") or []
@@ -674,13 +674,32 @@ class PluginsPage(QWidget):
             item.setToolTip(tip)
             item.setForeground(QColor("#34D399"))
             self.market_list.addItem(item)
+            # 每行一个「安装」按钮：不用先选中再点下面的安装（小白最容易卡的一步）
+            row = QWidget()
+            rl = QHBoxLayout(row)
+            rl.setContentsMargins(6, 2, 6, 2)
+            rl.setSpacing(8)
+            lbl = QLabel(item.text())
+            lbl.setToolTip(tip)
+            lbl.setStyleSheet("color: #34D399; font-size: 12.5px;")
+            rl.addWidget(lbl, 1)
+            btn = QPushButton("安装")
+            btn.setObjectName("primary")
+            btn.setMinimumHeight(26)
+            btn.setToolTip(tip)
+            btn.clicked.connect(lambda _=False, _id=eid: self._install_market_plugin(_id))
+            rl.addWidget(btn)
+            self.market_list.setItemWidget(item, row)
 
-    def _install_market_plugin(self):
-        item = self.market_list.currentItem()
-        if item is None:
-            QMessageBox.information(self, "提示", "请先在官方插件市场选择一个插件")
-            return
-        e = self._market_entries.get(str(item.data(Qt.UserRole) or ""))
+    def _install_market_plugin(self, eid=None):
+        """eid 为空时取列表当前选中项；行内「安装」按钮直接把它自己那条传进来。"""
+        if eid is None:
+            item = self.market_list.currentItem()
+            if item is None:
+                QMessageBox.information(self, "提示", "请先在官方插件市场选择一个插件")
+                return
+            eid = str(item.data(Qt.UserRole) or "")
+        e = self._market_entries.get(str(eid or ""))
         if not e:
             QMessageBox.information(self, "提示", "插件信息已失效，请点「刷新」")
             return
@@ -791,6 +810,20 @@ class PluginsPage(QWidget):
             payload={"mode": "dir", "target": str(plugin_dir)},
             retryable=True, settings=self.ctx.settings,
         )
+
+    def _prompt_restart(self, what: str):
+        """装完插件只提示一次，绝不自动重启（重启会打断群里正在进行的对话）。"""
+        box = QMessageBox(self)
+        box.setWindowTitle(what)
+        box.setIcon(QMessageBox.Information)
+        box.setText(f"{what}。重启机器人后新插件才会加载。")
+        btn_yes = box.addButton("立即重启", QMessageBox.AcceptRole)
+        box.addButton("稍后", QMessageBox.RejectRole)
+        # 非阻塞弹窗：exec() 会卡住事件循环（自动化测试里没人点就永远停在那）
+        box.setAttribute(Qt.WA_DeleteOnClose, True)
+        box.finished.connect(
+            lambda _r: self._restart_bot() if box.clickedButton() is btn_yes else None)
+        box.open()
 
     def _restart_bot(self):
         if self.ctx.tasks.has_active("service"):

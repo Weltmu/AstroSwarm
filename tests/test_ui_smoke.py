@@ -655,7 +655,8 @@ def test_beginner_mode_nav():
     brain = win.pages[6]
     brain.load_config()
     app.processEvents()
-    assert win.nav_row_hidden("飞书"), "小白模式应隐藏飞书"
+    # 通道详情页（飞书/微信/QQ/纸飞机）已收进「接入」：本来就不占侧栏一行
+    assert win.nav_row_hidden("飞书"), "通道详情页不该单独占一行"
     assert win.nav_row_hidden("插件"), "小白模式应隐藏插件"
     if win._rail_rows:
         assert win.rail_list.isRowHidden(win._rail_rows["日志"]), "小白模式应隐藏日志"
@@ -682,7 +683,7 @@ def test_beginner_mode_nav():
     # 通过设置页滑块走完整 UI 链路切换，验证点击后立即生效
     sp.chk_beginner_mode.setChecked(False)
     app.processEvents()
-    assert not win.nav_row_hidden("飞书"), "关闭小白模式应显示飞书"
+    assert not win.nav_row_hidden("消息中心"), "关闭小白模式应显示消息中心"
     assert not win.nav_row_hidden("插件"), "关闭小白模式应显示插件"
     assert not feishu_card.isHidden(), "关闭小白模式首页应显示飞书卡"
     assert not brain._agent_panel.isHidden(), "关闭小白模式 AI 大脑应显示档案"
@@ -692,7 +693,7 @@ def test_beginner_mode_nav():
 
     sp.chk_beginner_mode.setChecked(True)
     app.processEvents()
-    assert win.nav_row_hidden("飞书"), "重新开启小白模式应再次隐藏飞书"
+    assert win.nav_row_hidden("消息中心"), "重新开启小白模式应再次隐藏消息中心"
     assert feishu_card.isHidden(), "重新开启小白模式首页应隐藏飞书卡"
 
     win.close()
@@ -1013,7 +1014,15 @@ def test_nav_groups_match_console():
     app.processEvents()
 
     assert [t for t, _items in MainWindow.NAV_GROUPS] == ["运行", "能力", "系统"]
-    assert [n for _t, items in MainWindow.NAV_GROUPS for n in items] == list(MainWindow.PAGE_ORDER)
+    visible = [n for _t, items in MainWindow.NAV_GROUPS for n in items]
+    # 侧栏只剩主线入口：通道详情页（微信/QQ/飞书/纸飞机）收进「接入」，不占行
+    assert visible == ["首页", "接入", "AI 大脑", "插件", "插件工坊",
+                       "全局管理", "消息中心", "日志", "依赖", "设置"], visible
+    assert set(MainWindow.SUB_NAV_PARENT) == {"微信", "QQ", "飞书", "纸飞机"}
+    for child, parent in MainWindow.SUB_NAV_PARENT.items():
+        assert child in MainWindow.PAGE_ORDER, child
+        assert parent in visible, parent
+    assert set(MainWindow.PAGE_ORDER) == set(visible) | set(MainWindow.SUB_NAV_PARENT)
     # 组内顺序与控制台一致：能力组是「AI 大脑 / 插件」，系统组第一项是「全局管理」
     assert MainWindow.NAV_GROUPS[1][1] == ("AI 大脑", "插件", "插件工坊")
     assert MainWindow.NAV_GROUPS[2][1][0] == "全局管理"
@@ -1027,6 +1036,13 @@ def test_nav_groups_match_console():
     app.processEvents()
     assert win.stack.currentIndex() == win._page_index["全局管理"]
     assert win.nav_lists[2].currentRow() == 0, "选中行要跟着切到系统组第一项"
+
+    # 进通道详情页：页面还在，但侧栏高亮归属的「接入」行（不再有独立行）
+    win.switch_page("微信")
+    app.processEvents()
+    assert win.stack.currentIndex() == win._page_index["微信"]
+    assert win.nav_lists[0].currentRow() == 1, "通道详情页要高亮「接入」那一行"
+    assert win.nav_lists[2].currentRow() == -1, "切到运行组后系统组不该还高亮"
 
     # 一次只有一组能高亮
     win.nav_lists[0].setCurrentRow(0)

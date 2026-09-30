@@ -32,6 +32,28 @@ PIP_INDEX = os.environ.get(
 )
 
 
+def offline_wheels_dir():
+    """包内内置的机器人依赖 wheels（有就用它装，零联网）。
+
+    查找顺序：环境变量 ASTROSWARM_BOT_WHEELS → 安装目录的 wheels-bot / wheels。
+    返回 None 表示没内置，走原来的联网安装。
+    """
+    here = Path(__file__).resolve()
+    root = here.parents[2] if len(here.parents) > 2 else here.parent
+    cands = []
+    env = (os.environ.get("ASTROSWARM_BOT_WHEELS") or "").strip()
+    if env:
+        cands.append(Path(env))
+    cands += [root / "wheels-bot", root / "wheels"]
+    for cand in cands:
+        try:
+            if cand.is_dir() and any(cand.glob("*.whl")):
+                return cand
+        except OSError:
+            continue
+    return None
+
+
 def state_path() -> Path:
     return platform_info.data_home() / "state.json"
 
@@ -182,18 +204,32 @@ def ensure_bot(log=print) -> Settings:
     marker = s.bot_dir / ".venv" / ".qbm_deps_v3"
     if not marker.exists():
         log("安装机器人依赖（nonebot2 / adapter-qq / localstore / openai / mcp）...")
-        subprocess.run(
-            [str(venv_py), "-m", "pip", "install", "-q", "--upgrade", "pip"],
-            check=False,
-            env={**os.environ, "PIP_INDEX_URL": PIP_INDEX},
-            timeout=600,
-        )
-        subprocess.run(
-            [str(venv_py), "-m", "pip", "install", "-q", *BOT_DEPS],
-            check=True,
-            env={**os.environ, "PIP_INDEX_URL": PIP_INDEX},
-            timeout=900,
-        )
+        wheels = offline_wheels_dir()
+        if wheels is not None:
+            log(f"用内置 wheels 离线安装：{wheels}")
+            r = subprocess.run(
+                [str(venv_py), "-m", "pip", "install", "-q", "--no-index",
+                 "--find-links", str(wheels), *BOT_DEPS],
+                check=False,
+                env={**os.environ, "PIP_INDEX_URL": PIP_INDEX},
+                timeout=900,
+            )
+            if r.returncode != 0:
+                log("内置 wheels 装不上，回退联网安装")
+                wheels = None
+        if wheels is None:
+            subprocess.run(
+                [str(venv_py), "-m", "pip", "install", "-q", "--upgrade", "pip"],
+                check=False,
+                env={**os.environ, "PIP_INDEX_URL": PIP_INDEX},
+                timeout=600,
+            )
+            subprocess.run(
+                [str(venv_py), "-m", "pip", "install", "-q", *BOT_DEPS],
+                check=True,
+                env={**os.environ, "PIP_INDEX_URL": PIP_INDEX},
+                timeout=900,
+            )
         marker.write_text("ok", encoding="utf-8")
         log("依赖安装完成")
     bot_mod.write_env(s)

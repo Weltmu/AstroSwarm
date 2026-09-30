@@ -15,7 +15,7 @@ from ...tasks.workers import (DshControlTask, InstallDshTask, RestartBotTask,
 from .. import theme as theme_mod
 from ..icon_font import make_icon
 from ..theme import TEXT_3
-from ..widgets import GlassPanel, StatusBadge
+from ..widgets import FoldSection, GlassPanel, StatusBadge
 from .channel_panels import QQChannelPanel
 from .common import PageContext, TaskPanel, make_row
 
@@ -52,37 +52,8 @@ def _make_warning_box(text: str) -> QFrame:
     return box
 
 
-class _Fold(QWidget):
-    """折叠区：一行 ghost 按钮 + 默认收起的内容。
-
-    按钮太多的页面（QQ 页最多时一排 6 个 dsh 按钮）用它把次要动作收起来，
-    首屏只留主流程；展开状态记在自己身上，不被父页面刷新重置。
-    """
-
-    def __init__(self, closed_text: str, open_text: str, content: QWidget, parent=None):
-        super().__init__(parent)
-        self._closed = closed_text
-        self._open = open_text
-        self._content = content
-        self._expanded = False
-        v = QVBoxLayout(self)
-        v.setContentsMargins(0, 0, 0, 0)
-        v.setSpacing(8)
-        self.btn = QPushButton(closed_text)
-        self.btn.setObjectName("ghost")
-        self.btn.clicked.connect(self.toggle)
-        # 左对齐的窄条，不要拉成一条占满整行的空框（看起来像输入框）
-        v.addWidget(self.btn, 0, Qt.AlignLeft)
-        content.setVisible(False)
-        v.addWidget(content)
-
-    def toggle(self):
-        self.set_expanded(not self._expanded)
-
-    def set_expanded(self, expanded: bool):
-        self._expanded = bool(expanded)
-        self._content.setVisible(self._expanded)
-        self.btn.setText(self._open if self._expanded else self._closed)
+# 折叠区统一实现在 widgets.FoldSection，这里保留旧名字给页面内部用
+_Fold = FoldSection
 
 
 class RunPage(QWidget):
