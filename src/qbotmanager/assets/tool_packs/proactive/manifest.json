@@ -1,0 +1,136 @@
+{
+  "id": "proactive",
+  "name": "主动聊天能力包",
+  "version": "1.1.0",
+  "kind": "tool-pack",
+  "description": "活跃气氛、话题建议等主动聊天工具。 v1.1.0：主动触达参数可在插件详情页调整（概率/最小间隔/互动窗口/未回上限/免打扰/限速），支持 QQ 与微信。",
+  "adapters": [
+    "qq_official",
+    "wechat_ilink"
+  ],
+  "min_version": "0.4.0",
+  "permissions": [
+    "send_message"
+  ],
+  "tools": [
+    {
+      "name": "get_activity_suggestion",
+      "description": "获取一个活跃气氛/话题建议",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "permissions": [
+        "send_message"
+      ],
+      "lifecycle": "none"
+    }
+  ],
+  "behavior": {
+    "proactive": {
+      "enabled": true,
+      "outreach_chance": 0.5,
+      "min_interval_h": 24,
+      "reply_window_h": 24,
+      "max_unanswered": 3,
+      "greeting_chance": 0.3,
+      "quiet_start": 23,
+      "quiet_end": 8,
+      "rate_per_hour": 20,
+      "platforms": [
+        "qq",
+        "wechat"
+      ]
+    }
+  },
+  "config": {
+    "type": "params",
+    "fields": [
+      {
+        "key": "enabled",
+        "label": "启用主动触达",
+        "type": "bool",
+        "default": true
+      },
+      {
+        "key": "outreach_chance",
+        "label": "每轮触发概率",
+        "type": "number",
+        "min": 0,
+        "max": 1,
+        "step": 0.05,
+        "default": 0.5
+      },
+      {
+        "key": "min_interval_h",
+        "label": "两次主动最小间隔（小时）",
+        "type": "number",
+        "min": 0.02,
+        "max": 168,
+        "step": 0.5,
+        "default": 24
+      },
+      {
+        "key": "reply_window_h",
+        "label": "只在用户 N 小时内说过话才发",
+        "type": "number",
+        "min": 0.1,
+        "max": 168,
+        "step": 0.5,
+        "default": 24
+      },
+      {
+        "key": "max_unanswered",
+        "label": "连续没回上限（条）",
+        "type": "number",
+        "min": 0,
+        "max": 20,
+        "step": 1,
+        "default": 3
+      },
+      {
+        "key": "greeting_chance",
+        "label": "早安/晚安概率",
+        "type": "number",
+        "min": 0,
+        "max": 1,
+        "step": 0.05,
+        "default": 0.3
+      },
+      {
+        "key": "quiet_start",
+        "label": "免打扰开始（点）",
+        "type": "number",
+        "min": 0,
+        "max": 23,
+        "step": 1,
+        "default": 23
+      },
+      {
+        "key": "quiet_end",
+        "label": "免打扰结束（点）",
+        "type": "number",
+        "min": 0,
+        "max": 23,
+        "step": 1,
+        "default": 8
+      },
+      {
+        "key": "rate_per_hour",
+        "label": "每小时上限（条）",
+        "type": "number",
+        "min": 0,
+        "max": 240,
+        "step": 1,
+        "default": 20
+      },
+      {
+        "key": "platforms",
+        "label": "生效平台",
+        "type": "text",
+        "default": "qq,wechat"
+      }
+    ]
+  }
+}

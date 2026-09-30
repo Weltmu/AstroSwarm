@@ -1,0 +1,9 @@
+PySide6>=6.8
+pyinstaller>=6.0
+qrcode>=7.0
+pillow>=10.0
+zstandard>=0.22
+tzdata>=2024.1        # Windows 上 zoneinfo 需要它，否则 ZoneInfo("Asia/Shanghai") 直接抛异常
+cryptography>=40.0
+pynacl>=1.5          # 激活码/插件市场清单的 Ed25519 验签（license.py、plugin_market.py 运行时依赖）
+PyJWT>=2.8
